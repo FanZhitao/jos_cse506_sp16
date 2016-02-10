@@ -33,6 +33,9 @@ i386_init(void)
 
 	cprintf("6828 decimal is %o octal!\n", 6828);
 
+	// Test colorful text display
+	//cprintf("\033[31m");
+
 	extern char end[];
 	end_debug = read_section_headers((0x10000+KERNBASE), (uintptr_t)end); 
 
