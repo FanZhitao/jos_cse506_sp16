@@ -83,10 +83,10 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
                         infop->rip_fn_narg
                 );
 
-                for (i = 1, offset = 0; i <= infop->rip_fn_narg; offset+=infop->size_fn_arg[i], i++) {
-                        //cprintf(" %016llx", *((int32_t *) (rbp - infop->size_fn_arg[i])));
-                        cprintf(" %016llx", *((int32_t *) (rbp - 4)));
+		// assume all args are 4 bytes
+                for (i = 0, offset = 0; i < infop->rip_fn_narg; i++) {
 			offset += infop->size_fn_arg[i];
+                        cprintf(" %016llx", *((int32_t *) (rbp - offset)));
                 }
                 cprintf("\n");
         }
