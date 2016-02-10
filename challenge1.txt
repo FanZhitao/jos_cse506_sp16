@@ -3,10 +3,12 @@ as the problem number.
 
 Solution: 
 
-As suggested, I interpret ANSI escape sequences in the text and translate color code to corresponding attribute. Then this attribute is set to character before each call to putch(). Otherwise, if text is not a valid escape sequences, move pointer fmt backward and continue.
+As suggested, I interpret ANSI escape sequences in the text and translate color code to corresponding attribute. Then this attribute is set to each character. Otherwise, if text is not a valid escape sequences, move pointer fmt backward and continue.
 
 ```
 // lib/printfmt.c
+int color = 0;
+
 void
 vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 {
@@ -18,7 +20,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
     va_list aq;
     va_copy(aq,ap);
     while (1) {    
-        // ===== Check if esc sequence: ESC[3Xm =====
+        // Check if esc sequence: ESC[3Xm
         ch = *(unsigned char *) fmt++;
         if (ch == 0x1B) { // ESC
             ch = *(unsigned char *) fmt++;
@@ -50,16 +52,20 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
         else {
             fmt--;
         }
-        // ==========================================
-
-        while ((ch = *(unsigned char *) fmt++) != '%') {
-            if (ch == '\0')
-                return;
-            putch(color | ch, putdat);
-        }
         // ...
     }
 }
+
+// kern/console.c
+extern int color;
+
+static void
+cga_putc(int c)
+{
+        // Set color attribute
+        if (color)
+                c |= color;
+	// ...
 ```
 
 Test it now. After we set color attribute by ANSI escape sequences of "\033[31m", "Hello World!" will show in red.
