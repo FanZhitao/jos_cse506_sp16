@@ -338,7 +338,7 @@ x64_vm_init(void)
     boot_map_region(pml4e, 
             (uintptr_t) UPAGES, 
             ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE), 
-            (physaddr_t) pages,
+            (physaddr_t) PADDR(pages),
             PTE_W);
 
 	//////////////////////////////////////////////////////////////////////
@@ -354,6 +354,11 @@ x64_vm_init(void)
 	// Your code goes here:
 
     //mapVa2Pa(pml4e, (uintptr_t) KSTACKTOP, (physaddr_t) &bootstack[0], KSTKSIZE);
+    boot_map_region(pml4e, 
+            (uintptr_t) (KSTACKTOP - KSTKSIZE), 
+            KSTKSIZE, 
+            (physaddr_t) PADDR(&bootstack[0]),
+            PTE_W);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE. We have detected the number
@@ -364,6 +369,11 @@ x64_vm_init(void)
 	// Your code goes here: 
 
 	//mapVa2Pa(pml4e, KERNBASE, 0, npages*PGSIZE);
+    boot_map_region(pml4e, 
+            (uintptr_t) KERNBASE, 
+            npages * PGSIZE, 
+            (physaddr_t) 0x0,
+            PTE_W);
 
 	// Check that the initial page directory has been set up correctly.
 	check_boot_pml4e(boot_pml4e);
@@ -622,7 +632,7 @@ boot_map_region(pml4e_t *pml4e, uintptr_t la, size_t size, physaddr_t pa, int pe
 
     for (p = 0; p < total; p++) {
         pte = pml4e_walk(pml4e, (void *) la, true);
-        (*pte) = (PADDR(pa) | (perm | PTE_P));
+        (*pte) = (pa | (perm | PTE_P));
 
         la += PGSIZE;
         pa += PGSIZE;
