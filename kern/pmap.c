@@ -454,10 +454,6 @@ page_init(void)
 		//if (UPAGES <= va && va < (UPAGES+ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE)))
 		//	continue;
 
-		// pml4 table
-		//if (va == (uint64_t) boot_pml4e)
-		//	continue;
-
 		// Add pages[i] to free list
 		if(last)
 			last->pp_link = &pages[i];
