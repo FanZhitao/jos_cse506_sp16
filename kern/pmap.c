@@ -233,6 +233,7 @@ boot_alloc(uint32_t n)
 	return result;
 }
 
+
 static void 
 mapVa2Pa(pml4e_t *pml4e, 
 	uintptr_t va,
@@ -254,7 +255,7 @@ mapVa2Pa(pml4e_t *pml4e,
 		i4 = PML4(va);
 		if (pdpe == NULL || PTE_ADDR(pml4e[i4]) != (uint64_t) pdpe) {
 			pdpe = (pdpe_t *) PADDR(boot_alloc(PGSIZE));
-			pml4e[i4] = ((uint64_t) &pdpe[0]) | pflag;
+	    	pml4e[i4] = ((uint64_t) &pdpe[0]) | pflag;
 		}
 
 		i3 = PDPE(va);
@@ -333,7 +334,12 @@ x64_vm_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 
-	mapVa2Pa(pml4e, (uintptr_t) UPAGES, (physaddr_t) pages, ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE));
+	//mapVa2Pa(pml4e, (uintptr_t) UPAGES, (physaddr_t) pages, ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE));
+    boot_map_region(pml4e, 
+            (uintptr_t) UPAGES, 
+            ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE), 
+            (physaddr_t) pages,
+            PTE_W);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -530,7 +536,21 @@ page_decref(struct PageInfo* pp)
 pte_t *
 pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 {
-	return NULL;
+	int i;
+
+	i = PML4((uintptr_t) va);
+
+    if (pml4e[i] & (PTE_P)) {
+        return pdpe_walk((pdpe_t *) PTE_ADDR(pml4e[i]), va, create);
+    }
+    else if (create) {
+        pml4e[i] = page2pa(page_alloc(ALLOC_ZERO));
+        pml4e[i] |= (PTE_P | PTE_W);
+        return pdpe_walk((pdpe_t *) PTE_ADDR(pml4e[i]), va, create);
+    } 
+    else {
+	    return NULL;
+    }
 }
 
 
@@ -540,8 +560,21 @@ pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 // Hints are the same as in pml4e_walk
 pte_t *
 pdpe_walk(pdpe_t *pdpe,const void *va,int create){
+    int i;
 
-	return NULL;
+    i = PDPE((uintptr_t) va);
+
+    if (pdpe[i] & (PTE_P)) {
+        return pgdir_walk((pde_t *) PTE_ADDR(pdpe[i]), va, create);
+    }
+    else if (create) {
+        pdpe[i] = page2pa(page_alloc(ALLOC_ZERO));
+        pdpe[i] |= (PTE_P | PTE_W);
+        return pgdir_walk((pde_t *) PTE_ADDR(pdpe[i]), va, create);
+    } 
+    else {
+	    return NULL;
+    }
 }
 // Given 'pgdir', a pointer to a page directory, pgdir_walk returns
 // a pointer to the page table entry (PTE). 
@@ -551,8 +584,22 @@ pdpe_walk(pdpe_t *pdpe,const void *va,int create){
 pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
-	// Fill this function in
-	return NULL;
+    int i, j;
+
+    i = PDX((uintptr_t) va);
+    j = PTX((uintptr_t) va);
+
+    if (pgdir[i] & (PTE_P)) {
+        return ((pte_t *) PTE_ADDR(pgdir[i])) + j;
+    }
+    else if (create) {
+        pgdir[i] = page2pa(page_alloc(ALLOC_ZERO));
+        pgdir[i] |= (PTE_P | PTE_W);
+        return ((pte_t *) PTE_ADDR(pgdir[i])) + j;
+    } 
+    else {
+	    return NULL;
+    }
 }
 
 //
@@ -568,7 +615,18 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pml4e_t *pml4e, uintptr_t la, size_t size, physaddr_t pa, int perm)
 {
-	// Fill this function in
+    int p, total;
+    pte_t *pte;
+
+    total = size / PGSIZE;
+
+    for (p = 0; p < total; p++) {
+        pte = pml4e_walk(pml4e, (void *) la, true);
+        (*pte) = (PADDR(pa) | (perm | PTE_P));
+
+        la += PGSIZE;
+        pa += PGSIZE;
+    }
 }
 
 //
