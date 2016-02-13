@@ -427,6 +427,7 @@ page_init(void)
 	size_t i;
 	struct PageInfo* last = NULL;
 	physaddr_t pa;
+	uintptr_t va;
 	for (i = 0; i < npages; i++) {
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = NULL;
@@ -439,6 +440,23 @@ page_init(void)
 		pa = page2pa(&pages[i]);
 		if (IOPHYSMEM <= pa && pa < EXTPHYSMEM)
 			continue;
+
+		// kernel space: tricky, skip boot_alloc() region
+		if (EXTPHYSMEM <= pa && pa <= (PADDR(&pages[npages-1])+PGSIZE))
+			continue;
+
+		// [BOOT_PAGE_TABLE_START, BOOT_PAGE_TABLE_END)
+		va = (uintptr_t) page2kva(&pages[i]);
+		if (BOOT_PAGE_TABLE_START <= va && va < BOOT_PAGE_TABLE_END)
+			continue;
+
+		// page info
+		//if (UPAGES <= va && va < (UPAGES+ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE)))
+		//	continue;
+
+		// pml4 table
+		//if (va == (uint64_t) boot_pml4e)
+		//	continue;
 
 		// Add pages[i] to free list
 		if(last)
