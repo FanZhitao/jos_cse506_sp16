@@ -482,9 +482,10 @@ page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
-	// Fill this function in
-
 	struct PageInfo *pp;
+
+	if (!page_free_list)
+		return NULL;
 	
 	pp = page_free_list;
 	page_free_list = pp->pp_link;
