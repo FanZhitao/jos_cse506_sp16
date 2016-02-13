@@ -270,7 +270,7 @@ mapVa2Pa(pml4e_t *pml4e,
 		}
 		
 		i1 = PTX(va);
-		pte[i1] = pa | pflag;
+		pte[i1] = PADDR(pa) | pflag;
 
 		va += PGSIZE;
 		pa += PGSIZE;
@@ -310,7 +310,7 @@ x64_vm_init(void)
 	// each physical page, there is a corresponding struct PageInfo in this
 	// array.  'npages' is the number of physical pages in memory.
 	// Your code goes here:
-	//pages = UPAGES;
+	pages = boot_alloc(npages*sizeof(struct PageInfo));
 	int i;
 	for (i = 0; i < npages; i++) {
 		page_initpp(&pages[i]);
@@ -332,23 +332,8 @@ x64_vm_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
-	/*
-	pdpe_t *pdpe1;
-	pdpe_t *pdpe2;
-	pde_t *pde1;
-	pde_t *pde2;
 
-	pdpe1 = pml4e + (PGSIZE/sizeof(pml4e));
-	pdpe2 = pdpe1 + (PGSIZE/sizeof(pdpe_t));
-	pde1  = pdpe2 + (PGSIZE/sizeof(pdpe_t));
-	pde2  = pde1  + (PGSIZE/sizeof(pde_t));
-
-	pml4e[0] = ((uint64_t) &pdpe1[0]) | (PTE_P); 
-	pml4e[1] = ((uint64_t) &pdpe2[0]) | (PTE_P); 
-	pdpe1[0] = ((uint64_t) &pde1[0])  | (PTE_P);
-	pdpe2[0] = ((uint64_t) &pde2[0])  | (PTE_P);
-	*/
-
+	mapVa2Pa(pml4e, (uintptr_t) UPAGES, (physaddr_t) pages, ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE));
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -362,6 +347,7 @@ x64_vm_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
+    //mapVa2Pa(pml4e, (uintptr_t) KSTACKTOP, (physaddr_t) &bootstack[0], KSTKSIZE);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE. We have detected the number
@@ -370,45 +356,8 @@ x64_vm_init(void)
 	//      the PA range [0, npages*PGSIZE)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here: 
-	/*uint32_t index;
-	pdpe_t *_pdpe;
-	pde_t *_pde;
-	pte_t *_pte;
-	uintptr_t va, valimit;
-	physaddr_t pa;
-	int pflag;*/
 
-	//valimit = KERNBASE + (npages * PGSIZE);
-	//pflag = (PTE_P | PTE_W);
-
-	// VA:[KERNBASE,npages*PGSIZE] => PA:[0,npages*PGSIZE]
-	// Use pte_addr() to unmask flag
-	//for (pa = 0, va = KERNBASE; va < valimit; va += PGSIZE, pa += PGSIZE) {
-		/*index = PML4(va);
-		_pdpe = (pdpe_t *) PTE_ADDR(pml4e[PML4(va)]);
-
-		index = PDPE(va);
-		_pde  = (pde_t *) PTE_ADDR(_pdpe[PDPE(va)]);
-
-		index = PDX(va);
-		_pte  = (pte_t*) PTE_ADDR(_pde[PDX(va)]);
-
-		_pte[PTX(va)] = (pa | pflag);*/
-
-	//}
-
-	mapVa2Pa(pml4e, KERNBASE, 0, npages*PGSIZE);
-
-	/*pdpe_t *_pdpe;
-	pml4e = &pml4e[PML4(KERNBASE)];
-	if(!(*pml4e & PTE_P))
-		return;
-	uint32_t tmp = PPN(PTE_ADDR(*pml4e));
-	if (tmp < npages)
-		_pdpe = (pdpe_t *) KADDR(PTE_ADDR(*pml4e));
-
-	assert(check_va2pa(pml4e, UPAGES) == PADDR(pages));
-	*/
+	//mapVa2Pa(pml4e, KERNBASE, 0, npages*PGSIZE);
 
 	// Check that the initial page directory has been set up correctly.
 	check_boot_pml4e(boot_pml4e);
