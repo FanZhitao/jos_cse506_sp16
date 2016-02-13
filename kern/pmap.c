@@ -233,7 +233,8 @@ boot_alloc(uint32_t n)
 	return result;
 }
 
-
+// Deprecated: my homemade map method, without page present check
+// 				use official boot_map_region() instead.
 static void 
 mapVa2Pa(pml4e_t *pml4e, 
 	uintptr_t va,
@@ -334,7 +335,6 @@ x64_vm_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 
-	//mapVa2Pa(pml4e, (uintptr_t) UPAGES, (physaddr_t) pages, ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE));
     boot_map_region(pml4e, 
             (uintptr_t) UPAGES, 
             ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE), 
@@ -353,7 +353,6 @@ x64_vm_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
-    //mapVa2Pa(pml4e, (uintptr_t) KSTACKTOP, (physaddr_t) &bootstack[0], KSTKSIZE);
     boot_map_region(pml4e, 
             (uintptr_t) (KSTACKTOP - KSTKSIZE), 
             KSTKSIZE, 
@@ -368,7 +367,6 @@ x64_vm_init(void)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here: 
 
-	//mapVa2Pa(pml4e, KERNBASE, 0, npages*PGSIZE);
     boot_map_region(pml4e, 
             (uintptr_t) KERNBASE, 
             npages * PGSIZE, 
@@ -442,6 +440,7 @@ page_init(void)
 		if (IOPHYSMEM <= pa && pa < EXTPHYSMEM)
 			continue;
 
+		// Add pages[i] to free list
 		if(last)
 			last->pp_link = &pages[i];
 		else
