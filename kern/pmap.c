@@ -229,7 +229,7 @@ boot_alloc(uint32_t n)
 		n = ROUNDUP(n, PGSIZE);
 		nextfree += n;
 	}
-	//return (void *) KADDR((uint64_t) result);
+	//return (void *) PADDR((uint64_t) result);
 	return result;
 }
 
@@ -253,19 +253,19 @@ mapVa2Pa(pml4e_t *pml4e,
 	for (p = 0; p < total; p++) {
 		i4 = PML4(va);
 		if (pdpe == NULL || PTE_ADDR(pml4e[i4]) != (uint64_t) pdpe) {
-			pdpe = boot_alloc(PGSIZE);
+			pdpe = (pdpe_t *) PADDR(boot_alloc(PGSIZE));
 			pml4e[i4] = ((uint64_t) &pdpe[0]) | pflag;
 		}
 
 		i3 = PDPE(va);
 		if (pde == NULL || PTE_ADDR(pdpe[i3]) != (uint64_t) pde) {
-			pde = boot_alloc(PGSIZE);
+			pde = (pde_t *) PADDR(boot_alloc(PGSIZE));
 			pdpe[i3] = ((uint64_t) &pde[0]) | pflag;
 		}
 
 		i2 = PDX(va);
 		if (pte == NULL || PTE_ADDR(pde[i2]) != (uint64_t) pte) {
-			pte = boot_alloc(PGSIZE);
+			pte = (pte_t *) PADDR(boot_alloc(PGSIZE));
 			pde[i2] = ((uint64_t) &pte[0]) | pflag;
 		}
 		
@@ -398,6 +398,17 @@ x64_vm_init(void)
 	//}
 
 	mapVa2Pa(pml4e, KERNBASE, 0, npages*PGSIZE);
+
+	/*pdpe_t *_pdpe;
+	pml4e = &pml4e[PML4(KERNBASE)];
+	if(!(*pml4e & PTE_P))
+		return;
+	uint32_t tmp = PPN(PTE_ADDR(*pml4e));
+	if (tmp < npages)
+		_pdpe = (pdpe_t *) KADDR(PTE_ADDR(*pml4e));
+
+	assert(check_va2pa(pml4e, UPAGES) == PADDR(pages));
+	*/
 
 	// Check that the initial page directory has been set up correctly.
 	check_boot_pml4e(boot_pml4e);
