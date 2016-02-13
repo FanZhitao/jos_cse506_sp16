@@ -216,8 +216,65 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
+	if (n == 0) {
+		result = nextfree;
+	} 
+	else if (n < 0) {
+		panic("Cannot allocate negative bytes");
+	}
+	else {
+		result = nextfree;
 
-	return NULL;
+		// "Bump up" the free pointer, kept aligned with PGSIZE
+		n = ROUNDUP(n, PGSIZE);
+		nextfree += n;
+	}
+	//return (void *) KADDR((uint64_t) result);
+	return result;
+}
+
+static void 
+mapVa2Pa(pml4e_t *pml4e, 
+	uintptr_t va,
+	physaddr_t pa,
+	uint64_t size
+) {
+	int p, total, pflag;
+	int i4, i3, i2, i1;
+	pdpe_t *pdpe;
+	pde_t  *pde;
+	pte_t  *pte;
+
+	total = size/PGSIZE;
+	pflag = (PTE_P | PTE_W);
+	i4 = i3 = i2 = i1 = 0;
+	pdpe = pde = pte = NULL;
+
+	for (p = 0; p < total; p++) {
+		i4 = PML4(va);
+		if (pdpe == NULL || PTE_ADDR(pml4e[i4]) != (uint64_t) pdpe) {
+			pdpe = boot_alloc(PGSIZE);
+			pml4e[i4] = ((uint64_t) &pdpe[0]) | pflag;
+		}
+
+		i3 = PDPE(va);
+		if (pde == NULL || PTE_ADDR(pdpe[i3]) != (uint64_t) pde) {
+			pde = boot_alloc(PGSIZE);
+			pdpe[i3] = ((uint64_t) &pde[0]) | pflag;
+		}
+
+		i2 = PDX(va);
+		if (pte == NULL || PTE_ADDR(pde[i2]) != (uint64_t) pte) {
+			pte = boot_alloc(PGSIZE);
+			pde[i2] = ((uint64_t) &pte[0]) | pflag;
+		}
+		
+		i1 = PTX(va);
+		pte[i1] = pa | pflag;
+
+		va += PGSIZE;
+		pa += PGSIZE;
+	}
 }
 
 // Set up a four-level page table:
@@ -241,7 +298,7 @@ x64_vm_init(void)
 	//panic("i386_vm_init: This function is not finished\n");
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
-	panic("x64_vm_init: this function is not finished\n");
+	//panic("x64_vm_init: this function is not finished\n");
 	pml4e = boot_alloc(PGSIZE);
 	memset(pml4e, 0, PGSIZE);
 	boot_pml4e = pml4e;
@@ -253,6 +310,11 @@ x64_vm_init(void)
 	// each physical page, there is a corresponding struct PageInfo in this
 	// array.  'npages' is the number of physical pages in memory.
 	// Your code goes here:
+	//pages = UPAGES;
+	int i;
+	for (i = 0; i < npages; i++) {
+		page_initpp(&pages[i]);
+	}
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -270,6 +332,22 @@ x64_vm_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
+	/*
+	pdpe_t *pdpe1;
+	pdpe_t *pdpe2;
+	pde_t *pde1;
+	pde_t *pde2;
+
+	pdpe1 = pml4e + (PGSIZE/sizeof(pml4e));
+	pdpe2 = pdpe1 + (PGSIZE/sizeof(pdpe_t));
+	pde1  = pdpe2 + (PGSIZE/sizeof(pdpe_t));
+	pde2  = pde1  + (PGSIZE/sizeof(pde_t));
+
+	pml4e[0] = ((uint64_t) &pdpe1[0]) | (PTE_P); 
+	pml4e[1] = ((uint64_t) &pdpe2[0]) | (PTE_P); 
+	pdpe1[0] = ((uint64_t) &pde1[0])  | (PTE_P);
+	pdpe2[0] = ((uint64_t) &pde2[0])  | (PTE_P);
+	*/
 
 
 	//////////////////////////////////////////////////////////////////////
@@ -284,6 +362,7 @@ x64_vm_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
+
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE. We have detected the number
 	// of physical pages to be npages.
@@ -291,6 +370,35 @@ x64_vm_init(void)
 	//      the PA range [0, npages*PGSIZE)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here: 
+	/*uint32_t index;
+	pdpe_t *_pdpe;
+	pde_t *_pde;
+	pte_t *_pte;
+	uintptr_t va, valimit;
+	physaddr_t pa;
+	int pflag;*/
+
+	//valimit = KERNBASE + (npages * PGSIZE);
+	//pflag = (PTE_P | PTE_W);
+
+	// VA:[KERNBASE,npages*PGSIZE] => PA:[0,npages*PGSIZE]
+	// Use pte_addr() to unmask flag
+	//for (pa = 0, va = KERNBASE; va < valimit; va += PGSIZE, pa += PGSIZE) {
+		/*index = PML4(va);
+		_pdpe = (pdpe_t *) PTE_ADDR(pml4e[PML4(va)]);
+
+		index = PDPE(va);
+		_pde  = (pde_t *) PTE_ADDR(_pdpe[PDPE(va)]);
+
+		index = PDX(va);
+		_pte  = (pte_t*) PTE_ADDR(_pde[PDX(va)]);
+
+		_pte[PTX(va)] = (pa | pflag);*/
+
+	//}
+
+	mapVa2Pa(pml4e, KERNBASE, 0, npages*PGSIZE);
+
 	// Check that the initial page directory has been set up correctly.
 	check_boot_pml4e(boot_pml4e);
 
@@ -344,9 +452,20 @@ page_init(void)
 	// NB: Remember to mark the memory used for initial boot page table i.e (va>=BOOT_PAGE_TABLE_START && va < BOOT_PAGE_TABLE_END) as in-use (not free)
 	size_t i;
 	struct PageInfo* last = NULL;
+	physaddr_t pa;
 	for (i = 0; i < npages; i++) {
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = NULL;
+
+		// page 0 is in use
+		if (i == 0)
+			continue;
+
+		// [IOPHYSMEM, EXTPHYSMEM)
+		pa = page2pa(&pages[i]);
+		if (IOPHYSMEM <= pa && pa < EXTPHYSMEM)
+			continue;
+
 		if(last)
 			last->pp_link = &pages[i];
 		else
@@ -371,7 +490,17 @@ struct PageInfo *
 page_alloc(int alloc_flags)
 {
 	// Fill this function in
-	return 0;
+
+	struct PageInfo *pp;
+	
+	pp = page_free_list;
+	page_free_list = pp->pp_link;
+	pp->pp_link = NULL;
+
+	if (alloc_flags & ALLOC_ZERO) {
+		memset(page2kva(pp), 0, PGSIZE);
+	}
+	return pp;
 }
 
 //
@@ -394,6 +523,12 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+
+	if (pp->pp_ref != 0 || pp->pp_link != NULL)
+		panic("Not a free page");
+
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 }
 
 //
