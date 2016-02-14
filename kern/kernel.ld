@@ -71,6 +71,6 @@ SECTIONS
         .debug_varnames  0 : { *(.debug_varnames) }
 
 	/DISCARD/ : {
-		*(.eh_frame .note.GNU-stack)
+		*(.note.GNU-stack)
 	}
 }
