@@ -31,10 +31,11 @@ KERN_SRCFILES :=	kern/entry.S \
 			lib/printfmt.c \
 			lib/readline.c \
 			lib/string.c  \
-		    kern/libdwarf_rw.c \
-		    kern/libdwarf_frame.c \
+			kern/libdwarf_rw.c \
+			kern/libdwarf_frame.c \
 			kern/libdwarf_lineno.c \
-		    kern/elf_rw.c
+			kern/libdwarf_loc.c \
+			kern/elf_rw.c
 
 
 # Only build files if they exist.
