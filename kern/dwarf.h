@@ -52,6 +52,8 @@ typedef struct _Dwarf_Cie       *Dwarf_Cie;
 #define DW_REG_TABLE_SIZE       66
 #endif
 
+#define DW_OP_fbreg             0x91
+
 typedef struct {
         Dwarf_Small     dw_offset_relevant;
         Dwarf_Small     dw_value_type;
@@ -65,6 +67,18 @@ typedef struct {
         Dwarf_Half              rt3_reg_table_size;
         Dwarf_Regtable_Entry3   *rt3_rules;
 } Dwarf_Regtable3;
+
+typedef struct {
+        Dwarf_Small     dw_offset_relevant;
+        Dwarf_Small     dw_value_type;
+        Dwarf_Half      dw_regnum;
+        Dwarf_Addr      dw_offset;
+} Dwarf_Regtable_Entry;
+
+typedef struct {
+	Dwarf_Regtable_Entry cfa_rule;
+        Dwarf_Regtable_Entry rules[DW_REG_TABLE_SIZE];
+} Dwarf_Regtable;
 
 typedef struct _Dwarf_AttrDef {
     uint64_t    ad_attrib;      /* DW_AT_XXX */
@@ -108,10 +122,9 @@ struct _Dwarf_Debug
     uint64_t  (*decode)(uint8_t **, int);
     int       dbg_pointer_size; /* Object address size. */
 
-	//Follwing two can either be eh_frame or debug_frame, 
-	//depending upon what is supported.
-    uint64_t   dbg_eh_offset; 	 
-    uint64_t   dbg_eh_size;			
+    uint64_t   curr_off_eh;
+    uint64_t   dbg_eh_offset;
+    uint64_t   dbg_eh_size;
 
     Dwarf_Half      dbg_frame_rule_table_size;
     Dwarf_Half      dbg_frame_rule_initial_value;
@@ -214,14 +227,6 @@ struct _Dwarf_Fde {
         Dwarf_Unsigned  fde_esymndx;    /* End symbol index for relocation. */
         Dwarf_Addr      fde_eoff;       /* Offset from the end symbol. */
 };
-
-typedef struct {
-        struct {
-                Dwarf_Small     dw_offset_relevant;
-                Dwarf_Half      dw_regnum;
-                Dwarf_Addr      dw_offset;
-        } rules[DW_REG_TABLE_SIZE];
-} Dwarf_Regtable;
 
 typedef struct _Dwarf_Error {
         int             err_error;      /* DWARF error. */
