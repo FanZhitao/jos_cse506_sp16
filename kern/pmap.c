@@ -714,8 +714,7 @@ page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 struct PageInfo *
 page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 {
-        int create = (pte_store == 0) ? 0 : 1;
-        pte_t *pte = pml4e_walk(pml4e, va, create);
+        pte_t *pte = pml4e_walk(pml4e, va, 0);
         if (pte != NULL) {
                 if (pte_store != 0) {
                         (*pte_store) = pte;
