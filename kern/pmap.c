@@ -681,9 +681,24 @@ boot_map_region(pml4e_t *pml4e, uintptr_t la, size_t size, physaddr_t pa, int pe
 int
 page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 {
-	// Fill this function in
-	return 0;
+        pte_t *pte = pml4e_walk(pml4e, va, 0);
+        if (pte != NULL) {
+                // There is already a page mapped at 'va', it should be page_remove()d.
+                page_remove(pml4e, va);
+        }
+        pte = pml4e_walk(pml4e, va, 1);
+        if (pte == NULL) {
+                //  page table couldn't be allocated
+                return -E_NO_MEM;
+        }
+
+        // The insertion succeeds.
+        (*pte) = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
+        pp->pp_ref++;
+
+        return 0;
 }
+
 
 //
 // Return the page mapped at virtual address 'va'.
@@ -699,8 +714,15 @@ page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 struct PageInfo *
 page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 {
-	// Fill this function in
-	return NULL;
+        int create = (pte_store == 0) ? 0 : 1;
+        pte_t *pte = pml4e_walk(pml4e, va, create);
+        if (pte != NULL) {
+                if (pte_store != 0) {
+                        (*pte_store) = pte;
+                }
+                return pa2page(PTE_ADDR(*pte));
+        }
+        return NULL;
 }
 
 //
@@ -721,7 +743,13 @@ page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 void
 page_remove(pml4e_t *pml4e, void *va)
 {
-	// Fill this function in
+        pte_t *pte;
+        struct PageInfo *pp = page_lookup(pml4e, va, &pte);
+        if (pp != NULL) {
+                page_decref(pp);
+                tlb_invalidate(pml4e, va);
+                *pte = 0;
+        }
 }
 
 //
