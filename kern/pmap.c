@@ -339,7 +339,7 @@ x64_vm_init(void)
             (uintptr_t) UPAGES, 
             ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE), 
             (physaddr_t) PADDR(pages),
-            PTE_W);
+            (PTE_W|PTE_U));
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -561,16 +561,35 @@ pte_t *
 pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 {
 	int i;
+	struct PageInfo *pp;
+	pte_t *pte;
 
 	i = PML4((uintptr_t) va);
 
     if (pml4e[i] & (PTE_P)) {
-        return pdpe_walk((pdpe_t *) PTE_ADDR(pml4e[i]), va, create);
+        return pdpe_walk((pdpe_t *) KADDR(PTE_ADDR(pml4e[i])), va, create);
     }
     else if (create) {
-        pml4e[i] = page2pa(page_alloc(ALLOC_ZERO));
-        pml4e[i] |= (PTE_P | PTE_W);
-        return pdpe_walk((pdpe_t *) PTE_ADDR(pml4e[i]), va, create);
+	pp = page_alloc(ALLOC_ZERO);
+
+	// Return null if allocation fails
+	if (!pp)
+		return NULL;
+	pp->pp_ref++;
+
+        pml4e[i] = page2pa(pp);
+        pml4e[i] |= (PTE_P | PTE_W | PTE_U);
+
+        pte = pdpe_walk((pdpe_t *) KADDR(PTE_ADDR(pml4e[i])), va, create);
+	
+	// Free newly allocated pdpe if get NULL
+	if (!pte) {
+		pp->pp_ref--;
+		page_free(pp);
+		pml4e[i] = ~(0xFFFFFFFF); 
+		return NULL;
+	}
+	return pte;
     } 
     else {
 	    return NULL;
@@ -585,16 +604,33 @@ pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 pte_t *
 pdpe_walk(pdpe_t *pdpe,const void *va,int create){
     int i;
+	struct PageInfo *pp;
+	pte_t *pte;
 
     i = PDPE((uintptr_t) va);
 
     if (pdpe[i] & (PTE_P)) {
-        return pgdir_walk((pde_t *) PTE_ADDR(pdpe[i]), va, create);
+        return pgdir_walk((pde_t *) KADDR(PTE_ADDR(pdpe[i])), va, create);
     }
     else if (create) {
-        pdpe[i] = page2pa(page_alloc(ALLOC_ZERO));
-        pdpe[i] |= (PTE_P | PTE_W);
-        return pgdir_walk((pde_t *) PTE_ADDR(pdpe[i]), va, create);
+	pp = page_alloc(ALLOC_ZERO);
+
+	if (!pp)
+		return NULL;
+	pp->pp_ref++;
+
+        pdpe[i] = page2pa(pp);
+        pdpe[i] |= (PTE_P | PTE_W | PTE_U);
+
+        pte = pgdir_walk((pde_t *) KADDR(PTE_ADDR(pdpe[i])), va, create);
+
+	if (!pte) {
+		pp->pp_ref--;
+		page_free(pp);
+		pdpe[i] = ~(0xFFFFFFFF); 
+		return NULL;
+	}
+	return pte;
     } 
     else {
 	    return NULL;
@@ -609,17 +645,23 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
     int i, j;
+	struct PageInfo *pp;
 
     i = PDX((uintptr_t) va);
     j = PTX((uintptr_t) va);
 
     if (pgdir[i] & (PTE_P)) {
-        return ((pte_t *) PTE_ADDR(pgdir[i])) + j;
+        return ((pte_t *) KADDR(PTE_ADDR(pgdir[i]))) + j;
     }
     else if (create) {
-        pgdir[i] = page2pa(page_alloc(ALLOC_ZERO));
-        pgdir[i] |= (PTE_P | PTE_W);
-        return ((pte_t *) PTE_ADDR(pgdir[i])) + j;
+	pp = page_alloc(ALLOC_ZERO);
+	if (!pp)
+		return NULL;
+	pp->pp_ref++;
+
+        pgdir[i] = page2pa(pp);
+        pgdir[i] |= (PTE_P | PTE_W | PTE_U);
+        return ((pte_t *) KADDR(PTE_ADDR(pgdir[i]))) + j;
     } 
     else {
 	    return NULL;
@@ -696,9 +738,8 @@ page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
         (*pte) = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
         pp->pp_ref++;
 
-        return 0;
+	return 0;
 }
-
 
 //
 // Return the page mapped at virtual address 'va'.
