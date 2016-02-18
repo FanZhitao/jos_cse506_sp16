@@ -83,6 +83,8 @@ getint(va_list *ap, int lflag)
 // Main function to format and print a string.
 void printfmt(void (*putch)(int, void*), void *putdat, const char *fmt, ...);
 
+int color = 0;
+
 void
 vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 {
@@ -94,6 +96,40 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 	va_list aq;
 	va_copy(aq,ap);
 	while (1) {
+		// Check if esc sequence: ESC[3Xm 
+        	ch = *(unsigned char *) fmt++;
+        	if (ch == 0x1B) { // ESC
+            		ch = *(unsigned char *) fmt++;
+            		if (ch == 0x5B) { // [
+                		ch = *(unsigned char *) fmt++;
+                		ch = *(unsigned char *) fmt++;
+                		if ((*(unsigned char *) fmt++) == 0x6D) { // m
+                    			// Match perfectly!
+                    			switch (ch) { // X
+                        			case '1': color = 0x0400; return; // Red
+                        			case '2': color = 0x0200; return; // Green
+                        			case '3': color = 0x0600; return; // Yellow
+                        			case '4': color = 0x0100; return; // Blue
+                        			case '5': color = 0x0500; return; // Magenta
+                        			case '6': color = 0x0300; return; // Cyan
+                        			case '7': color = 0x0700; return; // White
+                        			default:
+                        			    	fmt -= 5;
+							// fall-through
+                    			}
+        		        }
+        		        else {
+        		        	fmt -= 5;
+        		        }
+        		}
+        		else {
+        			fmt -= 2;
+        		}
+        	}
+        	else {
+        		fmt--;
+        	}
+
 		while ((ch = *(unsigned char *) fmt++) != '%') {
 			if (ch == '\0')
 				return;
@@ -211,10 +247,13 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		// (unsigned) octal
 		case 'o':
 			// Replace this with your code.
-			putch('X', putdat);
-			putch('X', putdat);
-			putch('X', putdat);
-			break;
+			//putch('X', putdat);
+			//putch('X', putdat);
+			//putch('X', putdat);
+			//break;
+                        num = getuint(&aq, 3);
+                        base = 8;
+                        goto number;
 
 		// pointer
 		case 'p':
