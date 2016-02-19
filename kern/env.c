@@ -328,13 +328,43 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  You must also do something with the program's entry point,
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
+	
+	// LAB 3: Your code here.
+	struct Elf *elf;
+	struct Proghdr *ph, *eph;
+
+	elf = (struct Elf *) binary;
+	e->elf = binary;
+	
+	// Check ELF magic number
+	if (elf->e_magic != ELF_MAGIC)
+		panic("Elf magic number check failed.");
+
+	// Locate by ELF header => Program header => Segment
+	ph = (struct Proghdr *) (binary + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+	for (; ph < eph; ph++) {
+		// Only handle LOAD type
+		if (ph->p_type != ELF_PROG_LOAD)
+			continue;
+		
+		// Allocate page
+		region_alloc(e, (uintptr_t *) ph->p_va, ph->p_filesz);
+
+		// Move section: binary+p_offset => p_va 
+		// NOTE: all offset are relevant to entire ELF
+		memmove((uintptr_t *) ph->p_va, 
+			(uintptr_t *) (binary + ph->p_offset), 
+			ph->p_filesz);
+	}
+
+	// Set entry point for context switch
+	e->env_tf.tf_rip = elf->e_entry;
 
 	// LAB 3: Your code here
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
-
-	// LAB 3: Your code here.
-	e->elf = binary;
+	region_alloc(e, (uintptr_t *) (USTACKTOP - PGSIZE), PGSIZE);
 }
 
 //
@@ -348,6 +378,20 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	
+	struct Env *env;
+	envid_t pid;
+
+	// 1.Allocate env
+	pid = 0;
+	if (env_alloc(&env, pid) == -E_BAD_ENV)
+		panic("Cannot alloc env");
+
+	// 2.Load ELF binary file
+	load_icode(env, binary);
+
+	// 3.Set env type
+	env->env_type = type;
 }
 
 //
@@ -482,7 +526,22 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	
+	// 1.Save current ctx of oldenv
+	if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+		curenv->env_status = ENV_RUNNABLE;
+		curenv->env_tf.tf_ds = GD_UD | 3;
+		curenv->env_tf.tf_es = GD_UD | 3;
+		curenv->env_tf.tf_ss = GD_UD | 3;
+		curenv->env_tf.tf_rsp = USTACKTOP;
+		curenv->env_tf.tf_cs = GD_UT | 3;
+	}
 
-	panic("env_run not yet implemented");
+	// 2.Restore ctx and switch to newenv
+	curenv = e;
+	curenv->env_status = ENV_RUNNING;
+	curenv->env_runs++;
+	lcr3((uint64_t) curenv->env_pml4e);
+	env_pop_tf(&(curenv->env_tf));
 }
 
