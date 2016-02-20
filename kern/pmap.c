@@ -322,6 +322,8 @@ x64_vm_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs = boot_alloc(NENV * sizeof(struct Env));
+
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -338,6 +340,11 @@ x64_vm_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
+    boot_map_region(pml4e, 
+            (uintptr_t) UPAGES, 
+            ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE), 
+            (physaddr_t) PADDR(pages),
+            (PTE_W|PTE_U));
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
@@ -346,11 +353,11 @@ x64_vm_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
-    boot_map_region(pml4e, 
-            (uintptr_t) UPAGES, 
-            ROUNDUP(npages*sizeof(struct PageInfo), PGSIZE), 
-            (physaddr_t) PADDR(pages),
-            (PTE_W|PTE_U));
+	boot_map_region(pml4e,
+		(uintptr_t) UENVS,
+		ROUNDUP(NENV * sizeof(struct Env), PGSIZE),
+		(physaddr_t) PADDR(envs),
+		(PTE_U | PTE_P));
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
