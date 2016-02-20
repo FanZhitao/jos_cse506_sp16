@@ -50,7 +50,7 @@
    pusha,popa so you will find these macros handy.
  */
 
-
+TRAPHANDLER(XTRPX_divzero, T_DIVIDE)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -59,3 +59,15 @@
  *       for how to pass a pointer to the trapframe.
  */
 
+_alltraps:
+	// Push stack as TrapFrame
+	PUSHA
+
+	mov GD_KD, %ds
+	mov GD_KD, %es
+	
+	// Call by x64 convention
+	mov %rsp, %rdi
+	call trap
+
+	// Should not return...

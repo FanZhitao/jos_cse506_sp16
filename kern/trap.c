@@ -59,6 +59,7 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+void XTRPX_divzero(void);
 
 void
 trap_init(void)
@@ -66,8 +67,17 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-    idt_pd.pd_lim = sizeof(idt)-1;
-    idt_pd.pd_base = (uint64_t)idt;
+	idt_pd.pd_lim = sizeof(idt)-1;
+	idt_pd.pd_base = (uint64_t)idt;
+
+	SETGATE(
+		idt[0],		// GateDesc to set
+		1, 		// istrap or not
+		GD_KT, 		// selector for handler
+		XTRPX_divzero, 	// offset for handler
+		0 		// DPL 0 for kernel mode
+	);
+
 	// Per-CPU setup
 	trap_init_percpu();
 }
