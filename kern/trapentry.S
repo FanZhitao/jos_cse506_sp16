@@ -50,40 +50,41 @@
    Find the PUSHA,POPA macros in kern/macro.h. Since amd64 doesn't support
    pusha,popa so you will find these macros handy.
  */
-num = 10
+.set num, 10
 
 // Generate trap handler, all calling _alltraps
 .altmacro
 .macro GEN_TRAP_HANDLERS n
-	.if \n
+	.if \n > 1
 		GEN_TRAP_HANDLERS %(n-1)
 	.endif
 	TRAPHANDLER(XTRPX_\n, T_DIVIDE)
 .endm
 
-// Place label address
-#define SET_ENTRY(name) 	\
-	.quad name	
+// Set entry
+.macro SET_ENTRY name
+	.quad \name
+.endm
 
 // Generate handler table
 .altmacro
 .macro GEN_TRAP_TABLE n
 	.globl entrytable
+	.align 2;	// align by 4 bytes
 	entrytable:
-	.space 80
-
-	GEN_TRAP_TABLE_0 n
+	GEN_TRAP_TABLE_0 \n
 .endm
 
 .macro GEN_TRAP_TABLE_0 n
-	.if \n
+	.if \n > 1
 		GEN_TRAP_TABLE_0 %(n-1)
 	.endif
-	SET_ENTRY(XTRPX_\n)
+	SET_ENTRY XTRPX_\n
 .endm
 
-	TRAPHANDLER(XTRPX_divzero, T_DIVIDE)
-	GEN_TRAP_HANDLERS 10
+
+// Expand macro here!
+GEN_TRAP_HANDLERS %(num)
 
 
 /*
@@ -104,8 +105,7 @@ _alltraps:
 	mov %rsp, %rdi
 	call trap
 
-	// Should not return...
-
+	// Should not return here...
 
 .data
-	GEN_TRAP_TABLE 10
+	GEN_TRAP_TABLE %(num)
