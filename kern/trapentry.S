@@ -42,6 +42,7 @@
 	pushq $(num);							\
 	jmp _alltraps
 
+
 .text
 
 /*
@@ -49,8 +50,19 @@
    Find the PUSHA,POPA macros in kern/macro.h. Since amd64 doesn't support
    pusha,popa so you will find these macros handy.
  */
+.altmacro
+.macro GEN_TRAP_HANDLERS n
+	.rep 1
+		.if \n
+			GEN_TRAP_HANDLERS %(n-1)
+		.endif
+		TRAPHANDLER(XTRPX_\n, T_DIVIDE)
+	.endr
+.endm
 
-TRAPHANDLER(XTRPX_divzero, T_DIVIDE)
+	//TRAPHANDLER(XTRPX_divzero, T_DIVIDE)
+	GEN_TRAP_HANDLERS 10
+
 
 /*
  * Lab 3: Your code here for _alltraps
