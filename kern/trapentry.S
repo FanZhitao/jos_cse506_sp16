@@ -55,10 +55,10 @@
 // Generate trap handler, all calling _alltraps
 .altmacro
 .macro GEN_TRAP_HANDLERS n
-	.if \n > 1
+	.if \n > 0
 		GEN_TRAP_HANDLERS %(n-1)
 	.endif
-	TRAPHANDLER(XTRPX_\n, T_DIVIDE)
+	TRAPHANDLER(XTRPX_\n, \n)
 .endm
 
 // Set entry
@@ -76,7 +76,7 @@
 .endm
 
 .macro GEN_TRAP_TABLE_0 n
-	.if \n > 1
+	.if \n > 0
 		GEN_TRAP_TABLE_0 %(n-1)
 	.endif
 	SET_ENTRY XTRPX_\n
@@ -98,8 +98,8 @@ _alltraps:
 	// Push stack as TrapFrame
 	PUSHA
 
-	mov GD_KD, %ds
-	mov GD_KD, %es
+	//mov GD_KD, %ds
+	//mov GD_KD, %es
 	
 	// Call by x64 convention
 	mov %rsp, %rdi
