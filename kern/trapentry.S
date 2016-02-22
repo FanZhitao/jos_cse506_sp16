@@ -95,7 +95,13 @@ GEN_TRAP_HANDLERS %(num)
  */
 
 _alltraps:
-	// Push stack as TrapFrame
+	// Prepare stack like TrapFrame
+	//  1.Top: ss, rsp, eflags, cs, rip (old regs pushed by CPU)
+	//  2.Mid: errorcode, trapno (pushed by TRAPHANDLER[_NOEC])
+	//  3.Bottom: ds, es, rax, rbx ... r15 (pushed here)
+	subq $16, %rsp
+	mov %ds, 8(%rsp)
+	mov %es, 0(%rsp)
 	PUSHA
 
 	//mov GD_KD, %ds
