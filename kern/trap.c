@@ -59,8 +59,6 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
-//void XTRPX_divzero(void);
-
 extern void *entrytable[];
 
 void
@@ -74,7 +72,7 @@ trap_init(void)
 	idt_pd.pd_base = (uint64_t)idt;
 
 	// Set idt entry pointing to entry setup in trapentry.S
-	for (i = 1; i <= 10; i++) {
+	for (i = 0; i <= 10; i++) {
 		SETGATE(
 			idt[i],		// GateDesc to set
 			1, 		// istrap or not
@@ -86,6 +84,10 @@ trap_init(void)
 
 	// Per-CPU setup
 	trap_init_percpu();
+
+	// Test int
+	//int j = 0;
+	//i = 1 / j;
 }
 
 // Initialize and load the per-CPU TSS and IDT
@@ -159,11 +161,23 @@ print_regs(struct PushRegs *regs)
 	cprintf("  rax  0x%08x\n", regs->reg_rax);
 }
 
+// Lab 3, Exercise 6
+static void
+breakpoint_handler(struct Trapframe *tf)
+{
+	while (1)
+		monitor(NULL);
+}
+
 static void
 trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	if (tf->tf_trapno == T_PGFLT)
+		page_fault_handler(tf);
+	else if (tf->tf_trapno == T_BRKPT)
+		breakpoint_handler(tf);
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
