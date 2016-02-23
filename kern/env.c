@@ -120,6 +120,15 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
+	int i;
+	for (i = NENV - 1; i >= 0; i--)
+	{
+		envs[i].env_status = ENV_FREE;
+		envs[i].env_id = 0;
+
+		envs[i].env_link = env_free_list;
+		env_free_list = &envs[i];
+	}
 
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -186,6 +195,10 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	p->pp_ref++;
+	e->env_pml4e = page2kva(p);
+
+	
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -274,6 +287,20 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	if (len == 0)
+		panic("Zero length of physical memory");
+
+	// TODO: coner-cases?
+	size_t num_of_pages = (ROUNDUP(va + len, PGSIZE) - ROUNDDOWN(va, PGSIZE)) / PGSIZE + 1;
+	int i;
+	for (i = 0; i < num_of_pages; i++)
+	{
+		struct PageInfo *pp = page_alloc(0);
+		if (!pp)
+			panic("Page alloc failed");
+		if (page_insert(e->env_pml4e, pp, va + PGSIZE * i, PTE_W | PTE_U) == -E_NO_MEM)
+			panic("Page table couldn't be allocated");
+	}
 }
 
 //
