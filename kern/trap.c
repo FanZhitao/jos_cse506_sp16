@@ -88,6 +88,7 @@ trap_init(void)
 	// Test int
 	//int j = 0;
 	//i = 1 / j;
+	//asm volatile("int $3");
 }
 
 // Initialize and load the per-CPU TSS and IDT
@@ -163,7 +164,7 @@ print_regs(struct PushRegs *regs)
 
 // Lab 3, Exercise 6
 static void
-breakpoint_handler(struct Trapframe *tf)
+breakpoint_handler0(struct Trapframe *tf)
 {
 	while (1)
 		monitor(NULL);
@@ -174,10 +175,17 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-	if (tf->tf_trapno == T_PGFLT)
-		page_fault_handler(tf);
-	else if (tf->tf_trapno == T_BRKPT)
-		breakpoint_handler(tf);
+	
+	switch (tf->tf_trapno) {
+		case T_DIVIDE:
+			//return;
+		case T_PGFLT:
+			page_fault_handler(tf);
+			//return;
+		case T_BRKPT:
+			breakpoint_handler0(tf);
+			//return;
+	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);

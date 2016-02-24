@@ -174,7 +174,7 @@ env_setup_vm(struct Env *e)
 	struct PageInfo *p = NULL;
 
 	// Allocate a page for the page directory
-	if (!(p = page_alloc(0)))
+	if (!(p = page_alloc(ALLOC_ZERO)))
 		return -E_NO_MEM;
 
 	// Now, set e->env_pml4e and initialize the page directory.
@@ -198,7 +198,10 @@ env_setup_vm(struct Env *e)
 	p->pp_ref++;
 	e->env_pml4e = page2kva(p);
 
-	
+	// Everything above UTOP is in the second entry of the PML4 
+	//  and needs to be mapped into every env's virtual space. 
+	// So simple copy this entry form kernel's pml4 to the env's pml4.
+	e->env_pml4e[1] = boot_pml4e[1];
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -379,10 +382,16 @@ load_icode(struct Env *e, uint8_t *binary)
 		region_alloc(e, (uintptr_t *) ph->p_va, ph->p_filesz);
 
 		// Move section: binary+p_offset => p_va 
-		// NOTE: all offset are relevant to entire ELF
+		//  NOTE: all offset are relevant to entire ELF
+		//  NOTE: change page table to Env's for a moment
+		//   cause p_va is va relative to Env's pg,
+		//   meanwhile everything above UTOP(including binary)
+		//   are mapped as kernel pg, so this works!
+		lcr3(PADDR(e->env_pml4e));
 		memmove((uintptr_t *) ph->p_va, 
 			(uintptr_t *) (binary + ph->p_offset), 
 			ph->p_filesz);
+		lcr3(boot_cr3);
 	}
 
 	// Set entry point for context switch
@@ -568,7 +577,10 @@ env_run(struct Env *e)
 	curenv = e;
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
-	lcr3((uint64_t) curenv->env_pml4e);
+
+	// NOTE: lcr3 must be real physical address!
+	lcr3(PADDR(curenv->env_pml4e));
+
 	env_pop_tf(&(curenv->env_tf));
 }
 

@@ -460,7 +460,7 @@ page_init(void)
 			continue;
 
 		// kernel space: tricky, skip boot_alloc() region
-		if (EXTPHYSMEM <= pa && pa <= (PADDR(&pages[npages-1])+PGSIZE))
+		if (EXTPHYSMEM <= pa && pa <= (PADDR(&pages[npages-1])+NENV*(sizeof(struct Env))+PGSIZE))
 			continue;
 
 		// [BOOT_PAGE_TABLE_START, BOOT_PAGE_TABLE_END)
@@ -664,13 +664,19 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
     int i, j;
 	struct PageInfo *pp;
+	pte_t *pte;
 
     i = PDX((uintptr_t) va);
     j = PTX((uintptr_t) va);
 
     if (pgdir[i] & (PTE_P)) {
-        return ((pte_t *) KADDR(PTE_ADDR(pgdir[i]))) + j;
-    }
+        pte = ((pte_t *) KADDR(PTE_ADDR(pgdir[i]))) + j;
+	/*if ((*pte) & (PTE_P))
+		return pte;
+	else
+		return NULL;*/
+	return pte;
+    } 
     else if (create) {
 	pp = page_alloc(ALLOC_ZERO);
 	if (!pp)
@@ -742,7 +748,8 @@ int
 page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 {
         pte_t *pte = pml4e_walk(pml4e, va, 0);
-        if (pte != NULL) {
+        //if (pte != NULL) {
+        if ((pte != NULL) && ((*pte) & PTE_P)) {
                 // There is already a page mapped at 'va', it should be page_remove()d.
                 page_remove(pml4e, va);
         }
