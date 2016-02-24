@@ -574,11 +574,11 @@ env_run(struct Env *e)
 		// 1.Save ctx for curenv
 		if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
 			curenv->env_status = ENV_RUNNABLE;
-			curenv->env_tf.tf_ds = GD_UD | 3;
+			/*curenv->env_tf.tf_ds = GD_UD | 3;
 			curenv->env_tf.tf_es = GD_UD | 3;
 			curenv->env_tf.tf_ss = GD_UD | 3;
 			curenv->env_tf.tf_rsp = USTACKTOP;
-			curenv->env_tf.tf_cs = GD_UT | 3;
+			curenv->env_tf.tf_cs = GD_UT | 3;*/
 		}
 
 		// 2.Restore ctx and switch to newenv

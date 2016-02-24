@@ -43,14 +43,12 @@
 	jmp _alltraps
 
 
-.text
-
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
    Find the PUSHA,POPA macros in kern/macro.h. Since amd64 doesn't support
    pusha,popa so you will find these macros handy.
  */
-.set num, 10
+.set num, 31
 
 // Generate trap handler, all calling _alltraps
 .altmacro
@@ -58,7 +56,12 @@
 	.if \n > 0
 		GEN_TRAP_HANDLERS %(n-1)
 	.endif
-	TRAPHANDLER_NOEC(XTRPX_\n, \n)
+
+	.if \n == 14
+		TRAPHANDLER(XTRPX_\n, \n)
+	.else
+		TRAPHANDLER_NOEC(XTRPX_\n, \n)
+	.endif
 .endm
 
 // Set entry
@@ -83,8 +86,9 @@
 .endm
 
 
-// Expand macro here!
-GEN_TRAP_HANDLERS %(num)
+.text
+	// Expand macro here!
+	GEN_TRAP_HANDLERS %(num)
 
 
 /*
@@ -104,8 +108,11 @@ _alltraps:
 	mov %es, 0(%rsp)
 	PUSHA
 
-	//mov GD_KD, %ds
-	//mov GD_KD, %es
+	// CPU only switch CS/SS as per what's in kernel's TSS,
+	//  so we have to take care of DS/ES/FS/GS switch by ourselves
+	//mov 35, %ax
+	//mov %ax, %ds
+	//mov %ax, %es
 	
 	// Call by x64 convention
 	mov %rsp, %rdi

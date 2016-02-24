@@ -72,7 +72,7 @@ trap_init(void)
 	idt_pd.pd_base = (uint64_t)idt;
 
 	// Set idt entry pointing to entry setup in trapentry.S
-	for (i = 0; i <= 10; i++) {
+	for (i = 0; i <= 31; i++) {
 		SETGATE(
 			idt[i],		// GateDesc to set
 			1, 		// istrap or not
@@ -81,6 +81,9 @@ trap_init(void)
 			0 		// DPL 0 for kernel mode
 		);
 	}
+
+	SETGATE(idt[T_BRKPT], 1, GD_KT, entrytable[T_BRKPT], 3);
+	SETGATE(idt[T_PGFLT], 1, GD_KT, entrytable[T_PGFLT], 3);
 
 	// Per-CPU setup
 	trap_init_percpu();
@@ -166,6 +169,7 @@ print_regs(struct PushRegs *regs)
 static void
 breakpoint_handler0(struct Trapframe *tf)
 {
+	print_trapframe(tf);
 	while (1)
 		monitor(NULL);
 }
@@ -178,13 +182,13 @@ trap_dispatch(struct Trapframe *tf)
 	
 	switch (tf->tf_trapno) {
 		case T_DIVIDE:
-			//return;
+			break;
 		case T_PGFLT:
 			page_fault_handler(tf);
-			//return;
+			break;
 		case T_BRKPT:
 			breakpoint_handler0(tf);
-			//return;
+			break;
 	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
