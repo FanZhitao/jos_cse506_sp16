@@ -58,7 +58,7 @@
 	.if \n > 0
 		GEN_TRAP_HANDLERS %(n-1)
 	.endif
-	TRAPHANDLER(XTRPX_\n, \n)
+	TRAPHANDLER_NOEC(XTRPX_\n, \n)
 .endm
 
 // Set entry
