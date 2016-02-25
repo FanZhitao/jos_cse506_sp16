@@ -172,8 +172,9 @@ print_regs(struct PushRegs *regs)
 	cprintf("  rax  0x%08x\n", regs->reg_rax);
 }
 
+
 static void
-do_generalprotection_handler(struct Trapframe *tf)
+do_default_handler(struct Trapframe *tf)
 {
 	print_trapframe(tf);
 	env_destroy(curenv);
@@ -187,8 +188,6 @@ do_breakpoint_handler(struct Trapframe *tf)
 	while (1)
 		monitor(NULL);
 }
-
-
 
 // Lab 3, Exercise 7
 static void
@@ -205,8 +204,10 @@ trap_dispatch(struct Trapframe *tf)
 	
 	switch (tf->tf_trapno) {
 	case T_DIVIDE:
+		do_default_handler(tf);
 		break;
 	case T_GPFLT:
+		do_default_handler(tf);
 		break;
 	case T_PGFLT:
 		page_fault_handler(tf);
