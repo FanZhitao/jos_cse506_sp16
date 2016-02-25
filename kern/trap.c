@@ -202,6 +202,8 @@ do_syscall_handler(struct Trapframe *tf)
 			tf->tf_regs.reg_rbx,
 			tf->tf_regs.reg_rdi,
 			tf->tf_regs.reg_rsi);
+	tf->tf_regs.reg_rax = ret;
+
 }
 
 static void
@@ -213,19 +215,19 @@ trap_dispatch(struct Trapframe *tf)
 	switch (tf->tf_trapno) {
 	case T_DIVIDE:
 		do_default_handler(tf);
-		break;
+		return;
 	case T_GPFLT:
 		do_default_handler(tf);
-		break;
+		return;
 	case T_PGFLT:
 		page_fault_handler(tf);
-		break;
+		return;
 	case T_BRKPT:
 		do_breakpoint_handler(tf);
-		break;
+		return;
 	case T_SYSCALL:
 		do_syscall_handler(tf);
-		break;
+		return;
 	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
