@@ -72,6 +72,7 @@ trap_init(void)
 	idt_pd.pd_base = (uint64_t)idt;
 
 	// Set idt entry pointing to entry setup in trapentry.S
+	//  First pass: setup default handler (Trap gate)
 	for (i = 0; i <= 31; i++) {
 		SETGATE(
 			idt[i],		// GateDesc to set
@@ -82,16 +83,22 @@ trap_init(void)
 		);
 	}
 
-	SETGATE(idt[T_BRKPT], 1, GD_KT, entrytable[T_BRKPT], 3);
-	SETGATE(idt[T_PGFLT], 1, GD_KT, entrytable[T_PGFLT], 3);
+	// Second pass:
+	// Interrupt gate
+	SETGATE(idt[T_NMI], 0, GD_KT, entrytable[T_NMI], 0);
+	SETGATE(idt[T_PGFLT], 0, GD_KT, entrytable[T_PGFLT], 0);
+	
+	// System gate (Trap gate of DPL=3)
+	//  int 0x30/into/bound can be issued in User Mode
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, entrytable[T_SYSCALL], 3);
+	
+	// System interrupt gate (Interrupt gate of DPL=3)
+	//  int3 can be issued in User Mode by debugger
+	SETGATE(idt[T_BRKPT], 0, GD_KT, entrytable[T_BRKPT], 3);
+
 
 	// Per-CPU setup
 	trap_init_percpu();
-
-	// Test int
-	//int j = 0;
-	//i = 1 / j;
-	//asm volatile("int $3");
 }
 
 // Initialize and load the per-CPU TSS and IDT
@@ -165,13 +172,29 @@ print_regs(struct PushRegs *regs)
 	cprintf("  rax  0x%08x\n", regs->reg_rax);
 }
 
+static void
+do_generalprotection_handler(struct Trapframe *tf)
+{
+	print_trapframe(tf);
+	env_destroy(curenv);
+}
+
 // Lab 3, Exercise 6
 static void
-breakpoint_handler0(struct Trapframe *tf)
+do_breakpoint_handler(struct Trapframe *tf)
 {
 	print_trapframe(tf);
 	while (1)
 		monitor(NULL);
+}
+
+
+
+// Lab 3, Exercise 7
+static void
+do_syscall_handler(struct Trapframe *tf)
+{
+		
 }
 
 static void
@@ -181,14 +204,19 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 3: Your code here.
 	
 	switch (tf->tf_trapno) {
-		case T_DIVIDE:
-			break;
-		case T_PGFLT:
-			page_fault_handler(tf);
-			break;
-		case T_BRKPT:
-			breakpoint_handler0(tf);
-			break;
+	case T_DIVIDE:
+		break;
+	case T_GPFLT:
+		break;
+	case T_PGFLT:
+		page_fault_handler(tf);
+		break;
+	case T_BRKPT:
+		do_breakpoint_handler(tf);
+		break;
+	case T_SYSCALL:
+		do_syscall_handler(tf);
+		break;
 	}
 
 	// Unexpected trap: The user process or the kernel has a bug.

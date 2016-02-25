@@ -57,7 +57,12 @@
 		GEN_TRAP_HANDLERS %(n-1)
 	.endif
 
-	.if \n == 14
+	// CPU push error code for exception
+	//  13 - general protection
+	.if \n == 13
+		TRAPHANDLER(XTRPX_\n, \n)
+	//  14 - page fault
+	.elseif \n == 14
 		TRAPHANDLER(XTRPX_\n, \n)
 	.else
 		TRAPHANDLER_NOEC(XTRPX_\n, \n)
@@ -99,6 +104,7 @@
  */
 
 _alltraps:
+
 	// Prepare stack like TrapFrame
 	//  1.Top: ss, rsp, eflags, cs, rip (old regs pushed by CPU)
 	//  2.Mid: errorcode, trapno (pushed by TRAPHANDLER[_NOEC])
@@ -110,9 +116,9 @@ _alltraps:
 
 	// CPU only switch CS/SS as per what's in kernel's TSS,
 	//  so we have to take care of DS/ES/FS/GS switch by ourselves
-	//mov 35, %ax
-	//mov %ax, %ds
-	//mov %ax, %es
+	mov $0x10, %eax
+	mov %eax, %ds
+	mov %eax, %es
 	
 	// Call by x64 convention
 	mov %rsp, %rdi
