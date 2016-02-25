@@ -193,7 +193,15 @@ do_breakpoint_handler(struct Trapframe *tf)
 static void
 do_syscall_handler(struct Trapframe *tf)
 {
+	int64_t ret;
+
 	print_trapframe(tf);	
+	ret = syscall(tf->tf_regs.reg_rax,
+			tf->tf_regs.reg_rdx,
+			tf->tf_regs.reg_rcx,
+			tf->tf_regs.reg_rbx,
+			tf->tf_regs.reg_rdi,
+			tf->tf_regs.reg_rsi);
 }
 
 static void
