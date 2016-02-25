@@ -73,7 +73,7 @@ trap_init(void)
 
 	// Set idt entry pointing to entry setup in trapentry.S
 	//  First pass: setup default handler (Trap gate)
-	for (i = 0; i <= 31; i++) {
+	for (i = 0; i <= 64; i++) {
 		SETGATE(
 			idt[i],		// GateDesc to set
 			1, 		// istrap or not
@@ -193,7 +193,7 @@ do_breakpoint_handler(struct Trapframe *tf)
 static void
 do_syscall_handler(struct Trapframe *tf)
 {
-		
+	print_trapframe(tf);	
 }
 
 static void

@@ -48,7 +48,7 @@
    Find the PUSHA,POPA macros in kern/macro.h. Since amd64 doesn't support
    pusha,popa so you will find these macros handy.
  */
-.set num, 31
+.set num, 64
 
 // Generate trap handler, all calling _alltraps
 .altmacro
