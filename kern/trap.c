@@ -180,13 +180,23 @@ do_default_handler(struct Trapframe *tf)
 	env_destroy(curenv);
 }
 
+// Lab 3, Challenge 2
+static void
+do_debug_handler(struct Trapframe *tf)
+{
+	// Now in single-step mode, enter monitor until continue
+	while (1)
+		monitor(tf);
+}
+
 // Lab 3, Exercise 6
 static void
 do_breakpoint_handler(struct Trapframe *tf)
 {
-	print_trapframe(tf);
+	// Monitor will dump the tf
+	//print_trapframe(tf);
 	while (1)
-		monitor(NULL);
+		monitor(tf);
 }
 
 // Lab 3, Exercise 7
@@ -216,14 +226,17 @@ trap_dispatch(struct Trapframe *tf)
 	case T_DIVIDE:
 		do_default_handler(tf);
 		return;
+	case T_DEBUG:
+		do_debug_handler(tf);
+		return;
+	case T_BRKPT:
+		do_breakpoint_handler(tf);
+		return;
 	case T_GPFLT:
 		do_default_handler(tf);
 		return;
 	case T_PGFLT:
 		page_fault_handler(tf);
-		return;
-	case T_BRKPT:
-		do_breakpoint_handler(tf);
 		return;
 	case T_SYSCALL:
 		do_syscall_handler(tf);

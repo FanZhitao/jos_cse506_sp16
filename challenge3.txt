@@ -13,8 +13,9 @@ Lab 2 - Challenge 2
 =====================
 Lab 3 - Challenge 1
 
-Here are the macros automatically generating table for trap.c:
+Here are the macros in my trapentry.S automatically generating table for trap.c:
 
+-------------------------------------------------
 .set num, 64
 
 // Generate trap handler, all calling _alltraps
@@ -61,6 +62,47 @@ Here are the macros automatically generating table for trap.c:
 .text
 	// Expand macro here!
 	GEN_TRAP_HANDLERS %(num)
+-------------------------------------------------
+
+The generated code are like these as followed:
+
+student@vl56:~/lab$ objdump -D obj/kern/trapentry.o 
+
+obj/kern/trapentry.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <XTRPX_0>:
+   0:	6a 00                	pushq  $0x0
+   2:	6a 00                	pushq  $0x0
+   4:	e9 25 02 00 00       	jmpq   22e <_alltraps>
+   9:	90                   	nop
+
+000000000000000a <XTRPX_1>:
+   a:	6a 00                	pushq  $0x0
+   c:	6a 01                	pushq  $0x1
+   e:	e9 1b 02 00 00       	jmpq   22e <_alltraps>
+  13:	90                   	nop
+
+		......
+
+0000000000000082 <XTRPX_13>:
+  82:	6a 0d                	pushq  $0xd
+  84:	e9 a5 01 00 00       	jmpq   22e <_alltraps>
+  89:	90                   	nop
+
+000000000000008a <XTRPX_14>:
+  8a:	6a 0e                	pushq  $0xe
+  8c:	e9 9d 01 00 00       	jmpq   22e <_alltraps>
+  91:	90                   	nop
+	
+		......
+
+0000000000000228 <XTRPX_64>:
+ 228:	6a 00                	pushq  $0x0
+ 22a:	6a 40                	pushq  $0x40
+ 22c:	eb 00                	jmp    22e <_alltraps>
 
 
 

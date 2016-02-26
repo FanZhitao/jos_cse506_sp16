@@ -13,6 +13,7 @@
 #include <kern/kdebug.h>
 #include <kern/dwarf_api.h>
 #include <kern/trap.h>
+#include <kern/env.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -27,6 +28,9 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "printmapping", "Display virtual and physical mapping", mon_printmapping },
+	{ "si", "Single-step one instruction", mon_singlestep },
+	{ "continue", "Continue execution", mon_continue },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -95,6 +99,75 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 }
 
 
+uint64_t atoi(char *str)
+{
+	uint64_t i;
+
+	// Assmue first 2 char are '0x'
+	for (str += 2; *str; str++) {
+		i = i * 10 + (str[i] - '0');
+	}
+
+	return i;
+}
+
+int
+mon_printmapping(int argc, char **argv, struct Trapframe *tf)
+{
+	uint64_t startva, endva;
+
+	startva = atoi(argv[1]);
+	endva = atoi(argv[2]);
+
+	cprintf("Virtual mapping: %x ~ %x:\n", startva, endva);
+
+	return 0;
+}
+
+int
+mon_singlestep(int argc, char **argv, struct Trapframe *tf)
+{
+	uint64_t eflags;
+
+	cprintf("Current position: %016llx \n", tf->tf_rip);
+	
+	// Set eflags in tf, nor eflag register
+	tf->tf_eflags |= FL_TF;
+
+	// Breakpoint from user mode, curenv should be there in running state 
+	if ((tf->tf_cs & 3) == 3) {
+		assert(curenv && curenv->env_status == ENV_RUNNING);
+		env_run(curenv);
+	} else {
+		panic("Breakpoint from kernel");
+	}
+	
+	return 0;
+}
+
+
+int
+mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	uint64_t eflags;
+
+	cprintf("Continue execution");
+
+	// Reset eflags's TF bit
+	if (tf->tf_eflags & FL_TF)
+		tf->tf_eflags &= ~FL_TF;
+
+	// Breakpoint from user mode, curenv should be there in running state 
+	if ((tf->tf_cs & 3) == 3) {
+		assert(curenv && curenv->env_status == ENV_RUNNING);
+		env_run(curenv);
+	} else {
+		panic("Breakpoint from kernel");
+	}
+	
+	return 0;
+}
+
 
 /***** Kernel monitor command interpreter *****/
 
@@ -148,7 +221,9 @@ monitor(struct Trapframe *tf)
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
 
-	if (tf != NULL)
+	// Print trapframe only if trapped from breakpoint
+	//  and NOT in single-step mode
+	if (tf != NULL && !(tf->tf_eflags & FL_TF))
 		print_trapframe(tf);
 
 	while (1) {

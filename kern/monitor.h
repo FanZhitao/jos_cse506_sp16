@@ -16,4 +16,10 @@ int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
 
+// Enhanced monitor
+int mon_printmapping(int argc, char **argv, struct Trapframe *tf);
+int mon_singlestep(int argc, char **argv, struct Trapframe *tf);
+int mon_continue(int argc, char **argv, struct Trapframe *tf);
+
+
 #endif	// !JOS_KERN_MONITOR_H
