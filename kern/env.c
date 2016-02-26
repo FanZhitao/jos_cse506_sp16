@@ -293,7 +293,7 @@ region_alloc(struct Env *e, void *va, size_t len)
 		panic("Zero length of physical memory");
 
 	// TODO: coner-cases?
-	size_t num_of_pages = (ROUNDUP(va + len, PGSIZE) - ROUNDDOWN(va, PGSIZE)) / PGSIZE + 1;
+	size_t num_of_pages = (ROUNDUP(va + len, PGSIZE) - ROUNDDOWN(va, PGSIZE)) / PGSIZE;
 	int i;
 	for (i = 0; i < num_of_pages; i++)
 	{
