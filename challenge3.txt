@@ -1,3 +1,70 @@
 List challenge problems completed as part of the lab 3 handin, as well
 as the problem number.  If you worked any previous lab challenges and
 submitted them with this lab, list them here, along with the lab number.
+
+
+=====================
+Lab 2 - Challenge 2
+
+
+
+
+
+=====================
+Lab 3 - Challenge 1
+
+Here are the macros automatically generating table for trap.c:
+
+.set num, 64
+
+// Generate trap handler, all calling _alltraps
+.altmacro
+.macro GEN_TRAP_HANDLERS n
+	.if \n > 0
+		GEN_TRAP_HANDLERS %(n-1)
+	.endif
+
+	// CPU push error code for exception
+	//  13 - general protection
+	.if \n == 13
+		TRAPHANDLER(XTRPX_\n, \n)
+	//  14 - page fault
+	.elseif \n == 14
+		TRAPHANDLER(XTRPX_\n, \n)
+	.else
+		TRAPHANDLER_NOEC(XTRPX_\n, \n)
+	.endif
+.endm
+
+// Set entry
+.macro SET_ENTRY name
+	.quad \name
+.endm
+
+// Generate handler table
+.altmacro
+.macro GEN_TRAP_TABLE n
+	.globl entrytable
+	.align 2;	// align by 4 bytes
+	entrytable:
+	GEN_TRAP_TABLE_0 \n
+.endm
+
+.macro GEN_TRAP_TABLE_0 n
+	.if \n > 0
+		GEN_TRAP_TABLE_0 %(n-1)
+	.endif
+	SET_ENTRY XTRPX_\n
+.endm
+
+
+.text
+	// Expand macro here!
+	GEN_TRAP_HANDLERS %(num)
+
+
+
+=====================
+Lab 3 - Challenge 2
+
+
