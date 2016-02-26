@@ -853,6 +853,15 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	pte_t *pte;
+	int i;
+	
+	for (i = 0; i < len/PGSIZE + 1; i++) {
+		pte = pml4e_walk(env->env_pml4e, va + i*PGSIZE, 0);
+
+		if (pte == NULL || !((*pte) & PTE_P) || !((*pte) & PTE_W))
+			return -E_FAULT;
+	};
 	return 0;
 
 }

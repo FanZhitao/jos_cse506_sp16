@@ -70,10 +70,17 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 	// Call the function corresponding to the 'syscallno' parameter.
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
+	
+
+	// Check pointer given by user program:
+	//  The kernel will never suffer a page fault due to 
+	//  dereferencing a user-supplied pointer now!
 
 	switch (syscallno) {
 	case SYS_cputs:
+		user_mem_assert(curenv, (char *) a1, (size_t) a2, PTE_W);
 		sys_cputs((char *) a1, (size_t) a2);
+		return 0;
 	case SYS_cgetc:
 		return sys_cgetc();
 	case SYS_getenvid:
