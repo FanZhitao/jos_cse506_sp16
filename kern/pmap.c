@@ -854,16 +854,33 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
 	pte_t *pte;
+	uintptr_t va0;
 	int i;
-	
-	for (i = 0; i < len/PGSIZE + 1; i++) {
-		pte = pml4e_walk(env->env_pml4e, va + i*PGSIZE, 0);
 
-		if (pte == NULL || !((*pte) & PTE_P) || !((*pte) & PTE_W))
+	va0 = (uintptr_t) va;
+	
+	// Start check on each page
+	//  As per grade script logic:
+	//   return va if check failed on first page
+	//   otherwise, return round-down address
+	for (i = 0; i < len/PGSIZE + 1; i++) {
+
+		// 1.Check ULIM
+		if (va0 >= ULIM) {
+			user_mem_check_addr = va0;
 			return -E_FAULT;
+		}
+
+		// 2.Check permission
+		pte = pml4e_walk(env->env_pml4e, (void *) va0, 0);
+		if (pte == NULL || (((*pte) & perm) != perm)) {
+			user_mem_check_addr = va0;
+			return -E_FAULT;
+		}
+
+		va0 = ROUNDDOWN(va0, PGSIZE) + PGSIZE;
 	};
 	return 0;
-
 }
 
 //
