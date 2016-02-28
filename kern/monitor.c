@@ -14,6 +14,7 @@
 #include <kern/dwarf_api.h>
 #include <kern/trap.h>
 #include <kern/env.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -28,7 +29,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
-	{ "printmapping", "Display virtual and physical mapping", mon_printmapping },
+	{ "showmappings", "Display virtual and physical mapping", mon_showmappings },
 	{ "si", "Single-step one instruction", mon_singlestep },
 	{ "continue", "Continue execution", mon_continue },
 };
@@ -99,28 +100,51 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 }
 
 
-uint64_t atoi(char *str)
+uintptr_t atoi(char *str)
 {
-	uint64_t i;
+	uintptr_t i;
 
 	// Assmue first 2 char are '0x'
+	// Note: str is in hex
+	i = 0;
 	for (str += 2; *str; str++) {
-		i = i * 10 + (str[i] - '0');
+		i = i * 16 + (uint64_t) (*str - '0');
 	}
-
 	return i;
 }
 
 int
-mon_printmapping(int argc, char **argv, struct Trapframe *tf)
+mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 {
-	uint64_t startva, endva;
+	uintptr_t startva, endva;
+	pte_t *pte;
 
 	startva = atoi(argv[1]);
 	endva = atoi(argv[2]);
 
-	cprintf("Virtual mapping: %x ~ %x:\n", startva, endva);
+	if (startva > endva) {
+		cprintf("Invalid input 0x%x ~ 0x%x:\n", startva, endva);
+		return -1;
+	}
 
+	for (; startva <= endva; startva += PGSIZE) {
+		pte = pml4e_walk(boot_pml4e, (void *) startva, 0);	
+
+		if (pte) {
+			cprintf("0x%x ===> 0x%x (%s)\n", 
+				startva, 
+				PTE_ADDR(*pte),
+				(*pte & (PTE_W | PTE_U)) ? "PTE_W | PTE_U | PTE_P" :
+					(*pte & PTE_W) ? "PTE_W | PTE_P" :
+						(*pte & PTE_U) ? "PTE_U | PTE_P" :
+							(*pte & PTE_P) ? "PTE_P" : "Not Present");
+		} else {
+			cprintf("0x%x ===> 0x%x (%s)\n", 
+				startva, 
+				0,
+				"Not Present");
+		}
+	}
 	return 0;
 }
 
