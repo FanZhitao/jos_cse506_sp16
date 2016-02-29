@@ -13,6 +13,8 @@
 #include <kern/kdebug.h>
 #include <kern/dwarf_api.h>
 #include <kern/trap.h>
+#include <kern/env.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -27,6 +29,9 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "showmappings", "Display virtual and physical mapping", mon_showmappings },
+	{ "si", "Single-step one instruction", mon_singlestep },
+	{ "continue", "Continue execution", mon_continue },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -95,6 +100,98 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 }
 
 
+uintptr_t atoi(char *str)
+{
+	uintptr_t i;
+
+	// Assmue first 2 char are '0x'
+	// Note: str is in hex
+	i = 0;
+	for (str += 2; *str; str++) {
+		i = i * 16 + (uint64_t) (*str - '0');
+	}
+	return i;
+}
+
+int
+mon_showmappings(int argc, char **argv, struct Trapframe *tf)
+{
+	uintptr_t startva, endva;
+	pte_t *pte;
+
+	startva = atoi(argv[1]);
+	endva = atoi(argv[2]);
+
+	if (startva > endva) {
+		cprintf("Invalid input 0x%x ~ 0x%x:\n", startva, endva);
+		return -1;
+	}
+
+	for (; startva <= endva; startva += PGSIZE) {
+		pte = pml4e_walk(boot_pml4e, (void *) startva, 0);	
+
+		if (pte) {
+			cprintf("0x%x ===> 0x%x (%s)\n", 
+				startva, 
+				PTE_ADDR(*pte),
+				(*pte & (PTE_W | PTE_U)) ? "PTE_W | PTE_U | PTE_P" :
+					(*pte & PTE_W) ? "PTE_W | PTE_P" :
+						(*pte & PTE_U) ? "PTE_U | PTE_P" :
+							(*pte & PTE_P) ? "PTE_P" : "Not Present");
+		} else {
+			cprintf("0x%x ===> 0x%x (%s)\n", 
+				startva, 
+				0,
+				"Not Present");
+		}
+	}
+	return 0;
+}
+
+int
+mon_singlestep(int argc, char **argv, struct Trapframe *tf)
+{
+	uint64_t eflags;
+
+	cprintf("Current position: %016llx \n", tf->tf_rip);
+	
+	// Set eflags in tf, nor eflag register
+	tf->tf_eflags |= FL_TF;
+
+	// Breakpoint from user mode, curenv should be there in running state 
+	if ((tf->tf_cs & 3) == 3) {
+		assert(curenv && curenv->env_status == ENV_RUNNING);
+		env_run(curenv);
+	} else {
+		panic("Breakpoint from kernel");
+	}
+	
+	return 0;
+}
+
+
+int
+mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	uint64_t eflags;
+
+	cprintf("Continue execution");
+
+	// Reset eflags's TF bit
+	if (tf->tf_eflags & FL_TF)
+		tf->tf_eflags &= ~FL_TF;
+
+	// Breakpoint from user mode, curenv should be there in running state 
+	if ((tf->tf_cs & 3) == 3) {
+		assert(curenv && curenv->env_status == ENV_RUNNING);
+		env_run(curenv);
+	} else {
+		panic("Breakpoint from kernel");
+	}
+	
+	return 0;
+}
+
 
 /***** Kernel monitor command interpreter *****/
 
@@ -148,7 +245,9 @@ monitor(struct Trapframe *tf)
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
 
-	if (tf != NULL)
+	// Print trapframe only if trapped from breakpoint
+	//  and NOT in single-step mode
+	if (tf != NULL && !(tf->tf_eflags & FL_TF))
 		print_trapframe(tf);
 
 	while (1) {
