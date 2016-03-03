@@ -66,15 +66,44 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+extern void *entrytable[];
 
 void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
+	int i;
 
 	// LAB 3: Your code here.
-    idt_pd.pd_lim = sizeof(idt)-1;
-    idt_pd.pd_base = (uint64_t)idt;
+	idt_pd.pd_lim = sizeof(idt)-1;
+	idt_pd.pd_base = (uint64_t)idt;
+
+	// Set idt entry pointing to entry setup in trapentry.S
+	//  First pass: setup default handler (Trap gate)
+	for (i = 0; i <= 64; i++) {
+		SETGATE(
+			idt[i],		// GateDesc to set
+			1, 		// istrap or not
+			GD_KT, 		// selector for handler
+			entrytable[i], 	// offset for handler
+			0 		// DPL 0 for kernel mode
+		);
+	}
+
+	// Second pass:
+	// Interrupt gate
+	SETGATE(idt[T_NMI], 0, GD_KT, entrytable[T_NMI], 0);
+	SETGATE(idt[T_PGFLT], 0, GD_KT, entrytable[T_PGFLT], 0);
+	
+	// System gate (Trap gate of DPL=3)
+	//  int 0x30/into/bound can be issued in User Mode
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, entrytable[T_SYSCALL], 3);
+	
+	// System interrupt gate (Interrupt gate of DPL=3)
+	//  int3 can be issued in User Mode by debugger
+	SETGATE(idt[T_BRKPT], 0, GD_KT, entrytable[T_BRKPT], 3);
+
+
 	// Per-CPU setup
 	trap_init_percpu();
 }
@@ -173,11 +202,76 @@ print_regs(struct PushRegs *regs)
 	cprintf("  rax  0x%08x\n", regs->reg_rax);
 }
 
+
+static void
+do_default_handler(struct Trapframe *tf)
+{
+	print_trapframe(tf);
+	env_destroy(curenv);
+}
+
+// Lab 3, Challenge 2
+static void
+do_debug_handler(struct Trapframe *tf)
+{
+	// Now in single-step mode, enter monitor until continue
+	while (1)
+		monitor(tf);
+}
+
+// Lab 3, Exercise 6
+static void
+do_breakpoint_handler(struct Trapframe *tf)
+{
+	// Monitor will dump the tf
+	//print_trapframe(tf);
+	while (1)
+		monitor(tf);
+}
+
+// Lab 3, Exercise 7
+static void
+do_syscall_handler(struct Trapframe *tf)
+{
+	int64_t ret;
+
+	print_trapframe(tf);	
+	ret = syscall(tf->tf_regs.reg_rax,
+			tf->tf_regs.reg_rdx,
+			tf->tf_regs.reg_rcx,
+			tf->tf_regs.reg_rbx,
+			tf->tf_regs.reg_rdi,
+			tf->tf_regs.reg_rsi);
+	tf->tf_regs.reg_rax = ret;
+
+}
+
 static void
 trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	
+	switch (tf->tf_trapno) {
+	case T_DIVIDE:
+		do_default_handler(tf);
+		return;
+	case T_DEBUG:
+		do_debug_handler(tf);
+		return;
+	case T_BRKPT:
+		do_breakpoint_handler(tf);
+		return;
+	case T_GPFLT:
+		do_default_handler(tf);
+		return;
+	case T_PGFLT:
+		page_fault_handler(tf);
+		return;
+	case T_SYSCALL:
+		do_syscall_handler(tf);
+		return;
+	}
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -274,6 +368,10 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
+	
+	if ((tf->tf_cs & 3) == 0) {
+		panic("Page fault happened in kernel");
+	}
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.

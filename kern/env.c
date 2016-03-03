@@ -123,6 +123,14 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
+	int i;
+	for (i = NENV - 1; i >= 0; i--)
+	{
+		envs[i].env_status = ENV_FREE;
+		envs[i].env_id = 0;
+		envs[i].env_link = env_free_list;
+		env_free_list = &envs[i];
+	}
 
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -168,7 +176,7 @@ env_setup_vm(struct Env *e)
 	struct PageInfo *p = NULL;
 
 	// Allocate a page for the page directory
-	if (!(p = page_alloc(0)))
+	if (!(p = page_alloc(ALLOC_ZERO)))
 		return -E_NO_MEM;
 
 	// Now, set e->env_pml4e and initialize the page directory.
@@ -189,6 +197,13 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	p->pp_ref++;
+	e->env_pml4e = page2kva(p);
+
+	// Everything above UTOP is in the second entry of the PML4 
+	//  and needs to be mapped into every env's virtual space. 
+	// So simple copy this entry form kernel's pml4 to the env's pml4.
+	e->env_pml4e[1] = boot_pml4e[1];
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -286,6 +301,20 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	if (len == 0)
+		panic("Zero length of physical memory");
+
+	// TODO: coner-cases?
+	size_t num_of_pages = (ROUNDUP(va + len, PGSIZE) - ROUNDDOWN(va, PGSIZE)) / PGSIZE;
+	int i;
+	for (i = 0; i < num_of_pages; i++)
+	{
+		struct PageInfo *pp = page_alloc(0);
+		if (!pp)
+			panic("Page alloc failed");
+		if (page_insert(e->env_pml4e, pp, va + PGSIZE * i, PTE_W | PTE_U) == -E_NO_MEM)
+			panic("Page table couldn't be allocated");
+	}
 }
 
 //
@@ -340,13 +369,55 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  You must also do something with the program's entry point,
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
+	
+	// LAB 3: Your code here.
+	struct Elf *elf;
+	struct Proghdr *ph, *eph;
+
+	elf = (struct Elf *) binary;
+	e->elf = binary;
+	
+	// Check ELF magic number
+	if (elf->e_magic != ELF_MAGIC)
+		panic("Elf magic number check failed.");
+
+	// Locate by ELF header => Program header => Segment
+	ph = (struct Proghdr *) (binary + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+	for (; ph < eph; ph++) {
+		// Only handle LOAD type
+		if (ph->p_type != ELF_PROG_LOAD)
+			continue;
+
+		if (ph->p_filesz > ph->p_memsz)
+			panic("Segment's file size is larger than mem size");
+		
+		// Allocate page: size is p_memsz nor p_filesz
+		region_alloc(e, (uintptr_t *) ph->p_va, ph->p_memsz);
+
+		// Move section: binary+p_offset => p_va 
+		//  NOTE: all offset are relevant to entire ELF
+		//  NOTE: change page table to Env's for a moment
+		//   cause p_va is va relative to Env's pg,
+		//   meanwhile everything above UTOP(including binary)
+		//   are mapped as kernel pg, so this works!
+		lcr3(PADDR(e->env_pml4e));
+		memmove((uintptr_t *) ph->p_va, 
+			(uintptr_t *) (binary + ph->p_offset), 
+			ph->p_filesz);
+		memset((uintptr_t *) ph->p_va + ph->p_filesz, 
+			0, 
+			ph->p_memsz - ph->p_filesz);
+		lcr3(boot_cr3);
+	}
+
+	// Set entry point for context switch
+	e->env_tf.tf_rip = elf->e_entry;
 
 	// LAB 3: Your code here
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
-
-	// LAB 3: Your code here.
-	e->elf = binary;
+	region_alloc(e, (uintptr_t *) (USTACKTOP - PGSIZE), PGSIZE);
 }
 
 //
@@ -360,6 +431,20 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	
+	struct Env *env;
+	envid_t pid;
+
+	// 1.Allocate env
+	pid = 0;
+	if (env_alloc(&env, pid) == -E_BAD_ENV)
+		panic("Cannot alloc env");
+
+	// 2.Load ELF binary file
+	load_icode(env, binary);
+
+	// 3.Set env type
+	env->env_type = type;
 }
 
 //
@@ -508,7 +593,29 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	
+	// This is a context switch if curenv is NULL (first run)
+	//  or curenv different from e
+	if (curenv == NULL || curenv->env_id == e->env_id) {
+		// 1.Save ctx for curenv
+		if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+			curenv->env_status = ENV_RUNNABLE;
+			/*curenv->env_tf.tf_ds = GD_UD | 3;
+			curenv->env_tf.tf_es = GD_UD | 3;
+			curenv->env_tf.tf_ss = GD_UD | 3;
+			curenv->env_tf.tf_rsp = USTACKTOP;
+			curenv->env_tf.tf_cs = GD_UT | 3;*/
+		}
 
-	panic("env_run not yet implemented");
+		// 2.Restore ctx and switch to newenv
+		curenv = e;
+		curenv->env_status = ENV_RUNNING;
+		curenv->env_runs++;
+
+		// NOTE: lcr3 must be real physical address!
+		lcr3(PADDR(curenv->env_pml4e));
+	}
+
+	env_pop_tf(&(curenv->env_tf));
 }
 
