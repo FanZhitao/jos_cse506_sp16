@@ -235,7 +235,7 @@ do_syscall_handler(struct Trapframe *tf)
 {
 	int64_t ret;
 
-	print_trapframe(tf);	
+	//print_trapframe(tf);	
 	ret = syscall(tf->tf_regs.reg_rax,
 			tf->tf_regs.reg_rdx,
 			tf->tf_regs.reg_rcx,
@@ -406,6 +406,7 @@ page_fault_handler(struct Trapframe *tf)
 
 	// LAB 4: Your code here.
 	uintptr_t uxstack;
+	struct UTrapframe *utf;
 	
 	// 1.Check if:
 	//  1.1 callback function is setup
@@ -419,58 +420,24 @@ page_fault_handler(struct Trapframe *tf)
 
 		// 2.If fault caused by fault handler (recursively),
 		//  put new utf at tf_rsp rather than UXSTACKTOP
-		if (tf->tf_rsp > (UXSTACKTOP-1))
-			uxstack = tf->tf_rsp;
+		//  and first push an empty 64-bit word.
+		if ((UXSTACKTOP-PGSIZE) <= tf->tf_rsp && tf->tf_rsp <= (UXSTACKTOP-1))
+			uxstack = tf->tf_rsp - 8;
 		else
 			uxstack = UXSTACKTOP;
 
-		/*
-		 * 2.Prepare exception stack
-		 *  objdump -D obj/kern/trap.o | grep -A 500 "<page_fault_handler>:" | grep -A 5 -B 20 rep
-    			mov    -0x28(%rbp),%rax
-    			mov    0xb0(%rax),%rdx
-    			mov    -0x28(%rbp),%rax
-    			mov    0xa8(%rax),%r8
-    			mov    -0x28(%rbp),%r9
-    			mov    -0x28(%rbp),%rax
-    			mov    0x90(%rax),%r10
-    			mov    -0x18(%rbp),%r11
-
-    			mov    $0xffffffffef800000,%rax
-    			sub    $0x10,%rax
-    			mov    %rdx,0x8(%rax)
-    			mov    %r8,(%rax)
-    			sub    $0x78,%rax
-    			cld    
-    			mov    %rax,%rsi
-    			mov    %r9,%rdi
-    			mov    $0xf,%rcx
-    			rep movsl %ds:(%rsi),%es:(%rdi)
-    			mov    %r10,0x78(%rax)
-    			mov    %r11,0x80(%rax)
-		*/
-		__asm __volatile("movq %0, %%rax\n"
-				"subq $16, %%rax\n"
-				"movq %1, 8(%%rax)\n" 	// rsp
-			 	"movq %2, (%%rax)\n" 	// eflags
-				"subq $120, %%rax\n"	// reserve 15 dword
-				"cld\n" 		// copy 15 dword from tf_reg => rax
-				"movq %%rax, %%rsi\n"	// low: r15,r14...rax :high
-				"movq %3, %%rdi\n"
-			 	"movq $15, %%rcx\n"
-				"rep movsl\n"
-			 	"movq %4, 120(%%rax)\n" // error code
-			 	"movq %5, 128(%%rax)\n" // fault va
-			: 
-			: 	"r" (uxstack), 
-				"r" (tf->tf_rsp), 
-				"r" (tf->tf_eflags),  
-			 	"r" (&(tf->tf_regs)), 
-			 	"r" (tf->tf_err), 
-			 	"r" (fault_va) 
-			: 	"rax", "rcx", "rsi", "rdi");
+		// 2.Prepare exception stack
+		utf = (struct UTrapframe *) (uxstack - sizeof(struct UTrapframe));
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_err;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_rip = tf->tf_rip;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_rsp = tf->tf_rsp;
 
 		// 3.Jump to handler wrapper in user space
+		curenv->env_tf.tf_regs.reg_rbp = uxstack;
+		curenv->env_tf.tf_rsp = (uintptr_t) utf;
 		curenv->env_tf.tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
 		env_run(curenv);
 	}
