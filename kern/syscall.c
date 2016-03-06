@@ -158,6 +158,12 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	
 	struct Env *env;
 	struct PageInfo *pp;
+	int pu, pua, puw, puaw;
+
+	pu = PTE_P | PTE_U;
+	pua = pu | PTE_AVAIL;
+	puw = pu | PTE_W;
+	puaw = pua | PTE_W;
 
 	// Env does not exist
 	if (envid2env(envid, &env, 1))
@@ -165,17 +171,18 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 
 	// va >= UTOP or not aligned or perm is inappropriate
 	if (((uintptr_t) va) >= UTOP 
-		|| ((uintptr_t) va) % PGSIZE
-		|| perm <= PTE_SYSCALL)
+		|| (((uintptr_t) va) % PGSIZE != 0)
+		|| !(perm == pu || perm == pua || perm == puw || perm == puaw))
 		return -E_INVAL;
 
 	pp = page_alloc(ALLOC_ZERO);
 	if (!pp)
 		return -E_NO_MEM;
 
-	if (page_insert(env->env_pml4e, pp, va, perm))
-	       return -E_NO_MEM;	
-	
+	if (page_insert(env->env_pml4e, pp, va, perm)) {
+		page_free(pp);
+		return -E_NO_MEM;	
+	}
 	return 0;
 }
 

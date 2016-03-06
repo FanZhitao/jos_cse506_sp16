@@ -356,7 +356,6 @@ trap(struct Trapframe *tf)
 		sched_yield();
 }
 
-
 void
 page_fault_handler(struct Trapframe *tf)
 {
@@ -406,20 +405,73 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	uintptr_t uxstack;
 	
+	// 1.Check if:
+	//  1.1 callback function is setup
 	if (curenv->env_pgfault_upcall) {
-		// 1.Check if env_pgfault_upcall is accessible for user
+
+		//  1.2 user has allocated UX stack by themself
+		//  1.3 env_pgfault_upcall is accessible for user
+		//  1.4 exception stack isn't overflow
+		user_mem_assert(curenv, (void *) (UXSTACKTOP-PGSIZE), PGSIZE, PTE_U | PTE_W);
 		user_mem_assert(curenv, curenv->env_pgfault_upcall, PGSIZE, PTE_U);
 
-		// 2.Store tf onto stack for return
-		//  NOTE: return to faulting user code directly, nor through kernel
-		
-		
-		
-		// 3.Jump to handler in user space
-		tf->tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
-		tf->tf_regs.reg_rbp = UXSTACKTOP;
-		tf->tf_rsp = UXSTACKTOP;
+		// 2.If fault caused by fault handler (recursively),
+		//  put new utf at tf_rsp rather than UXSTACKTOP
+		if (tf->tf_rsp > (UXSTACKTOP-1))
+			uxstack = tf->tf_rsp;
+		else
+			uxstack = UXSTACKTOP;
+
+		/*
+		 * 2.Prepare exception stack
+		 *  objdump -D obj/kern/trap.o | grep -A 500 "<page_fault_handler>:" | grep -A 5 -B 20 rep
+    			mov    -0x28(%rbp),%rax
+    			mov    0xb0(%rax),%rdx
+    			mov    -0x28(%rbp),%rax
+    			mov    0xa8(%rax),%r8
+    			mov    -0x28(%rbp),%r9
+    			mov    -0x28(%rbp),%rax
+    			mov    0x90(%rax),%r10
+    			mov    -0x18(%rbp),%r11
+
+    			mov    $0xffffffffef800000,%rax
+    			sub    $0x10,%rax
+    			mov    %rdx,0x8(%rax)
+    			mov    %r8,(%rax)
+    			sub    $0x78,%rax
+    			cld    
+    			mov    %rax,%rsi
+    			mov    %r9,%rdi
+    			mov    $0xf,%rcx
+    			rep movsl %ds:(%rsi),%es:(%rdi)
+    			mov    %r10,0x78(%rax)
+    			mov    %r11,0x80(%rax)
+		*/
+		__asm __volatile("movq %0, %%rax\n"
+				"subq $16, %%rax\n"
+				"movq %1, 8(%%rax)\n" 	// rsp
+			 	"movq %2, (%%rax)\n" 	// eflags
+				"subq $120, %%rax\n"	// reserve 15 dword
+				"cld\n" 		// copy 15 dword from tf_reg => rax
+				"movq %%rax, %%rsi\n"	// low: r15,r14...rax :high
+				"movq %3, %%rdi\n"
+			 	"movq $15, %%rcx\n"
+				"rep movsl\n"
+			 	"movq %4, 120(%%rax)\n" // error code
+			 	"movq %5, 128(%%rax)\n" // fault va
+			: 
+			: 	"r" (uxstack), 
+				"r" (tf->tf_rsp), 
+				"r" (tf->tf_eflags),  
+			 	"r" (&(tf->tf_regs)), 
+			 	"r" (tf->tf_err), 
+			 	"r" (fault_va) 
+			: 	"rax", "rcx", "rsi", "rdi");
+
+		// 3.Jump to handler wrapper in user space
+		curenv->env_tf.tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
 		env_run(curenv);
 	}
 
