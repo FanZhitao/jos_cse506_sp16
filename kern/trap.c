@@ -406,6 +406,22 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	
+	if (curenv->env_pgfault_upcall) {
+		// 1.Check if env_pgfault_upcall is accessible for user
+		user_mem_assert(curenv, curenv->env_pgfault_upcall, PGSIZE, PTE_U);
+
+		// 2.Store tf onto stack for return
+		//  NOTE: return to faulting user code directly, nor through kernel
+		
+		
+		
+		// 3.Jump to handler in user space
+		tf->tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
+		tf->tf_regs.reg_rbp = UXSTACKTOP;
+		tf->tf_rsp = UXSTACKTOP;
+		env_run(curenv);
+	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",

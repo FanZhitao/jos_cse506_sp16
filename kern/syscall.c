@@ -119,7 +119,13 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	struct Env *env;
+
+	if (envid2env(envid, &env, 1))
+		return -E_BAD_ENV;
+
+	env->env_pgfault_upcall = func;
+	return 0;
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -149,7 +155,28 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	//   allocated!
 
 	// LAB 4: Your code here.
-	panic("sys_page_alloc not implemented");
+	
+	struct Env *env;
+	struct PageInfo *pp;
+
+	// Env does not exist
+	if (envid2env(envid, &env, 1))
+		return -E_BAD_ENV;
+
+	// va >= UTOP or not aligned or perm is inappropriate
+	if (((uintptr_t) va) >= UTOP 
+		|| ((uintptr_t) va) % PGSIZE
+		|| perm <= PTE_SYSCALL)
+		return -E_INVAL;
+
+	pp = page_alloc(ALLOC_ZERO);
+	if (!pp)
+		return -E_NO_MEM;
+
+	if (page_insert(env->env_pml4e, pp, va, perm))
+	       return -E_NO_MEM;	
+	
+	return 0;
 }
 
 // Map the page of memory at 'srcva' in srcenvid's address space
@@ -290,6 +317,10 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 		return sys_getenvid();
 	case SYS_env_destroy:
 		return sys_env_destroy((envid_t) a1);
+	case SYS_page_alloc:
+		return sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
+	case SYS_env_set_pgfault_upcall:
+		return sys_env_set_pgfault_upcall((envid_t) a1, (void *) a2);
 	default:
 		return -E_NO_SYS;
 	}
