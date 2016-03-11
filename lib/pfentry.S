@@ -68,17 +68,36 @@ _pgfault_upcall:
 	//
 	// LAB 4: Your code here.
 
+	// push trap-time RIP => trap-time RSP
+	movq 136(%rsp), %rax
+	movq 152(%rsp), %rbx
+	movq %rax, -8(%rbx)
+
+	// point RSP to newly pushed RIP
+	subq $8, %rbx
+	movq %rbx, 152(%rsp)
+
 	// Restore the trap-time registers.  After you do this, you
 	// can no longer modify any general-purpose registers.
 	// LAB 4: Your code here.
+
+	// Skip utf_fault_va and utf_err, then restore all regs
+	addq $16, %rsp
+	POPA_
 
 	// Restore eflags from the stack.  After you do this, you can
 	// no longer use arithmetic operations or anything else that
 	// modifies eflags.
 	// LAB 4: Your code here.
 
+	// Skip rip, then restore eflags
+	addq $8, %rsp
+	popfq
+
 	// Switch back to the adjusted trap-time stack.
 	// LAB 4: Your code here.
+	popq %rsp
 
 	// Return to re-execute the instruction that faulted.
 	// LAB 4: Your code here.
+	ret
