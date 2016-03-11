@@ -1,3 +1,120 @@
 List challenge problems completed as part of the lab 4 handin, as well
 as the problem number.  If you worked any previous lab challenges and
 submitted them with this lab, list them here, along with the lab number.
+
+
+
+=====================================================================
+			Lab 4 - Challenge 5
+
+1) I extract calling _pgfault_upcall logic as an individual function as followed:
+
+-------------------------------------------------------------------------------
+void
+call_user_exception_handler(struct Trapframe *tf, uint64_t fault_va)
+{
+        uintptr_t uxstack;
+        struct UTrapframe *utf;
+                                                                                  
+        // 1.Check if:
+        //  1.1 callback function is setup
+        if (curenv->env_pgfault_upcall) {
+
+                //  1.2 user has allocated UX stack by themself
+                //  1.3 env_pgfault_upcall is accessible for user
+                //  1.4 exception stack isn't overflow
+                user_mem_assert(curenv, (void *) (UXSTACKTOP-PGSIZE), PGSIZE, PTE_U | PTE_W);
+                user_mem_assert(curenv, curenv->env_pgfault_upcall, PGSIZE, PTE_U);
+
+                // 2.If fault caused by fault handler (recursively),
+                //  put new utf at tf_rsp rather than UXSTACKTOP
+                //  and first push an empty 64-bit word.
+                if ((UXSTACKTOP-PGSIZE) <= tf->tf_rsp && tf->tf_rsp <= (UXSTACKTOP-1))
+                        uxstack = tf->tf_rsp - 8;
+                else
+                        uxstack = UXSTACKTOP;
+
+                // 2.Prepare exception stack
+                utf = (struct UTrapframe *) (uxstack - sizeof(struct UTrapframe));
+                utf->utf_fault_va = fault_va;
+                utf->utf_err = tf->tf_err;
+                utf->utf_regs = tf->tf_regs;
+                utf->utf_rip = tf->tf_rip;
+                utf->utf_eflags = tf->tf_eflags;
+                utf->utf_rsp = tf->tf_rsp;
+
+                // 3.Jump to handler wrapper in user space
+                curenv->env_tf.tf_regs.reg_rbp = uxstack;
+                curenv->env_tf.tf_rsp = (uintptr_t) utf;
+                curenv->env_tf.tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
+                env_run(curenv);
+        }
+}
+-------------------------------------------------------------------------------
+
+2) Then it would be reused by other exception handler, let's say divide-zero exception:
+
+-------------------------------------------------------------------------------
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+        // Handle processor exceptions.
+        // LAB 3: Your code here.
+
+        switch (tf->tf_trapno) {
+        case T_DIVIDE:
+                call_user_exception_handler(tf, 0);
+                do_default_handler(tf);
+                return;
+	......
+}
+-------------------------------------------------------------------------------
+
+3) Finally, we can test if callback is working in divide-zero case by adding a user test program:
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ cat user/faultdivzerohandler.c 
+// test user-level fault handler -- just exit when we fault
+
+#include <inc/lib.h>
+
+void
+handler(struct UTrapframe *utf)
+{
+	void *addr = (void*)utf->utf_rip;
+	cprintf("divide zero error at va %x\n", addr);
+	sys_env_destroy(sys_getenvid());
+}
+
+int zero = 0;
+
+void
+umain(int argc, char **argv)
+{
+	set_pgfault_handler(handler);
+	cprintf("1/0 is %08x!\n", 1/zero);
+}
+-------------------------------------------------------------------------------
+
+4) The output are listed as below, which proves that execution path has been redirected to user-mode exception handler:
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ make run-faultdivzerohandler-nox
+
+sed -e "s/localhost:1234/localhost:26002/" -e "s/jumpto_longmode/*0x00000000001000e5/" < obj/kern/kernel.asm .gdbinit.tmpl > .gdbinit
+make[1]: Entering directory `/home/student/lab'
+make[1]: Leaving directory `/home/student/lab'
+qemu-system-x86_64 -nographic -m 256 -hda obj/kern/kernel.img -serial mon:stdio -gdb tcp::26002 -D qemu.log -smp 1 
+6828 decimal is 15254 octal!
+	......
+divide zero error at va 8000d3
+	......
+[00001000] exiting gracefully
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+-------------------------------------------------------------------------------
+
+

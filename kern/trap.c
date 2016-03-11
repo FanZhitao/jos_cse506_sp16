@@ -202,6 +202,9 @@ print_regs(struct PushRegs *regs)
 	cprintf("  rax  0x%08x\n", regs->reg_rax);
 }
 
+// Lab 4, Challenge 5
+void
+call_user_exception_handler(struct Trapframe *tf, uint64_t fault_va);
 
 static void
 do_default_handler(struct Trapframe *tf)
@@ -254,6 +257,7 @@ trap_dispatch(struct Trapframe *tf)
 	
 	switch (tf->tf_trapno) {
 	case T_DIVIDE:
+		call_user_exception_handler(tf, 0);
 		do_default_handler(tf);
 		return;
 	case T_DEBUG:
@@ -357,6 +361,47 @@ trap(struct Trapframe *tf)
 }
 
 void
+call_user_exception_handler(struct Trapframe *tf, uint64_t fault_va)
+{
+	uintptr_t uxstack;
+	struct UTrapframe *utf;
+	
+	// 1.Check if:
+	//  1.1 callback function is setup
+	if (curenv->env_pgfault_upcall) {
+
+		//  1.2 user has allocated UX stack by themself
+		//  1.3 env_pgfault_upcall is accessible for user
+		//  1.4 exception stack isn't overflow
+		user_mem_assert(curenv, (void *) (UXSTACKTOP-PGSIZE), PGSIZE, PTE_U | PTE_W);
+		user_mem_assert(curenv, curenv->env_pgfault_upcall, PGSIZE, PTE_U);
+
+		// 2.If fault caused by fault handler (recursively),
+		//  put new utf at tf_rsp rather than UXSTACKTOP
+		//  and first push an empty 64-bit word.
+		if ((UXSTACKTOP-PGSIZE) <= tf->tf_rsp && tf->tf_rsp <= (UXSTACKTOP-1))
+			uxstack = tf->tf_rsp - 8;
+		else
+			uxstack = UXSTACKTOP;
+
+		// 2.Prepare exception stack
+		utf = (struct UTrapframe *) (uxstack - sizeof(struct UTrapframe));
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_err;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_rip = tf->tf_rip;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_rsp = tf->tf_rsp;
+
+		// 3.Jump to handler wrapper in user space
+		curenv->env_tf.tf_regs.reg_rbp = uxstack;
+		curenv->env_tf.tf_rsp = (uintptr_t) utf;
+		curenv->env_tf.tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
+		env_run(curenv);
+	}
+}
+
+void
 page_fault_handler(struct Trapframe *tf)
 {
 	uint64_t fault_va;
@@ -405,42 +450,7 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
-	uintptr_t uxstack;
-	struct UTrapframe *utf;
-	
-	// 1.Check if:
-	//  1.1 callback function is setup
-	if (curenv->env_pgfault_upcall) {
-
-		//  1.2 user has allocated UX stack by themself
-		//  1.3 env_pgfault_upcall is accessible for user
-		//  1.4 exception stack isn't overflow
-		user_mem_assert(curenv, (void *) (UXSTACKTOP-PGSIZE), PGSIZE, PTE_U | PTE_W);
-		user_mem_assert(curenv, curenv->env_pgfault_upcall, PGSIZE, PTE_U);
-
-		// 2.If fault caused by fault handler (recursively),
-		//  put new utf at tf_rsp rather than UXSTACKTOP
-		//  and first push an empty 64-bit word.
-		if ((UXSTACKTOP-PGSIZE) <= tf->tf_rsp && tf->tf_rsp <= (UXSTACKTOP-1))
-			uxstack = tf->tf_rsp - 8;
-		else
-			uxstack = UXSTACKTOP;
-
-		// 2.Prepare exception stack
-		utf = (struct UTrapframe *) (uxstack - sizeof(struct UTrapframe));
-		utf->utf_fault_va = fault_va;
-		utf->utf_err = tf->tf_err;
-		utf->utf_regs = tf->tf_regs;
-		utf->utf_rip = tf->tf_rip;
-		utf->utf_eflags = tf->tf_eflags;
-		utf->utf_rsp = tf->tf_rsp;
-
-		// 3.Jump to handler wrapper in user space
-		curenv->env_tf.tf_regs.reg_rbp = uxstack;
-		curenv->env_tf.tf_rsp = (uintptr_t) utf;
-		curenv->env_tf.tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
-		env_run(curenv);
-	}
+	call_user_exception_handler(tf, fault_va);
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
