@@ -31,7 +31,7 @@ pgfault(struct UTrapframe *utf)
 	pte = uvpt[PGNUM(addr)];
 
 	if (!((pte & PTE_W) && (pte & PTE_COW)))
-		panic("Faulting address is not Write and COW page");
+		panic("Faulting address is not Write && COW page");
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -152,12 +152,16 @@ fork(void)
 	// 	UTEXT =0x800000 where program code located
 	//for (addr = (uint8_t*) UTEXT; addr < end; addr += PGSIZE)
 	//	duppage(envid, addr);
-	for (i = 0; i < PDX(UTOP); i++) {
+	//uintptr_t aaa = UTOP;
+	//int bbb = VPD(UTOP);
+	for (i = 0; i < VPD(end); i++) {
 		if (!(uvpd[i] & PTE_P))
 			continue;
 
 		for (j = 0; j < 512; j++) {
 			pn = i * 512 + j;
+			if (!(uvpt[pn] & PTE_P))
+				continue;
 			
 			// UX stack will be mapped later
 			if (pn != PGNUM(UXSTACKTOP-PGSIZE))

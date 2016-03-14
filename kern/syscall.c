@@ -88,10 +88,12 @@ sys_exofork(void)
 	struct Env *newenv;
 	int r;
 
-	if ((r = env_alloc(&newenv, sys_getenvid())) < 0)
+	if ((r = env_alloc(&newenv, curenv->env_id)) < 0)
 		return r;
 
 	newenv->env_status = ENV_NOT_RUNNABLE;
+	newenv->env_tf = curenv->env_tf;
+	newenv->env_tf.tf_regs.reg_rax = 0;
 
 	return newenv->env_id;
 }
@@ -158,7 +160,7 @@ check_va_valid(void *va)
 
 // PTE_P and PTE_U must be set, PTE_AVAIL or PTE_W may be set or not
 int
-check_va_perm(void *va, int perm)
+check_perm(int perm)
 {
 	int pu, pua, puw, puaw;
 
@@ -167,7 +169,7 @@ check_va_perm(void *va, int perm)
 	puw = pu | PTE_W;
 	puaw = pua | PTE_W;
 
-	return (!(perm == pu || perm == pua || perm == puw || perm == puaw));
+	return (!((perm & pu) || (perm & pua) || (perm & puw) || (perm & puaw)));
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -206,7 +208,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 		return -E_BAD_ENV;
 
 	// va >= UTOP or not aligned or perm is inappropriate
-	if (check_va_valid(va) || check_va_perm(va, perm))
+	if (check_va_valid(va) || check_perm(perm))
 		return -E_INVAL;
 
 	pp = page_alloc(ALLOC_ZERO);
@@ -263,8 +265,7 @@ sys_page_map(envid_t srcenvid, void *srcva,
 		return -E_INVAL;
 	
 	// srcva/dstva have wrong permission
-	if (check_va_perm(srcva, perm) || 
-			check_va_perm(dstva, perm))
+	if (check_perm(perm) || check_perm(perm))
 		return -E_INVAL;
 	
 	// srcva is NOT mapped in src address space
