@@ -199,6 +199,7 @@ env_setup_vm(struct Env *e)
 	// LAB 3: Your code here.
 	p->pp_ref++;
 	e->env_pml4e = page2kva(p);
+	e->env_cr3 = page2pa(p);
 
 	// Everything above UTOP is in the second entry of the PML4 
 	//  and needs to be mapped into every env's virtual space. 

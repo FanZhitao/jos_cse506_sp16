@@ -86,8 +86,10 @@ sys_exofork(void)
 	// LAB 4: Your code here.
 	
 	struct Env *newenv;
+	int r;
 
-	env_alloc(&newenv, sys_getenvid());
+	if ((r = env_alloc(&newenv, sys_getenvid())) < 0)
+		return r;
 
 	newenv->env_status = ENV_NOT_RUNNABLE;
 
