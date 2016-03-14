@@ -134,6 +134,11 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
+	SETTSS((struct SystemSegdesc64 *)(&(gdt[(GD_TSS0 >> 3) + 2 * thiscpu->cpu_id])),
+		STS_T64A,
+		(uint64_t)(&(thiscpu->cpu_ts)),
+		sizeof(struct Taskstate),
+		0);
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
