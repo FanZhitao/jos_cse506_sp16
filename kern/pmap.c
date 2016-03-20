@@ -907,7 +907,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 	//
 	// Your code here:
 	size_t alloc_size = ROUNDUP(size, PGSIZE); 
-	boot_map_region(boot_pml4e, base, alloc_size, pa, PTE_W | PTE_PCD | PTE_PWT); 
+	boot_map_region(boot_pml4e, base, alloc_size, ROUNDDOWN(pa, PGSIZE), PTE_W | PTE_PCD | PTE_PWT); 
 	base += alloc_size;
 	return (void *)(base - alloc_size);
 }

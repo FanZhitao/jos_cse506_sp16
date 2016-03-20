@@ -134,21 +134,24 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
-	SETTSS((struct SystemSegdesc64 *)(&(gdt[(GD_TSS0 >> 3) + 2 * thiscpu->cpu_id])),
-		STS_T64A,
-		(uint64_t)(&(thiscpu->cpu_ts)),
-		sizeof(struct Taskstate),
-		0);
+	int cur_cpu = cpunum();
+	int cur_cpu_gdt_index = (GD_TSS0 >> 3) + 2 * cur_cpu;
+	struct Taskstate *this_cpu_state = &(thiscpu->cpu_ts);
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	ts.ts_esp0 = KSTACKTOP;
+	//ts.ts_esp0 = KSTACKTOP;
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - cur_cpu * (KSTKSIZE + KSTKGAP); 
 
 	// Initialize the TSS slot of the gdt.
-	SETTSS((struct SystemSegdesc64 *)((gdt_pd>>16)+40),STS_T64A, (uint64_t) (&ts),sizeof(struct Taskstate), 0);
+	//SETTSS((struct SystemSegdesc64 *)((gdt_pd>>16)+40),STS_T64A, (uint64_t) (&ts),sizeof(struct Taskstate), 0);
+	gdt[cur_cpu_gdt_index] = SEG64(STS_T64A, (uint64_t)this_cpu_state, sizeof(struct Taskstate), 0);
+	gdt[cur_cpu_gdt_index].sd_s = 0;
+
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0);
+	//ltr(GD_TSS0);
+	ltr(GD_TSS0 + cur_cpu * sizeof(struct SystemSegdesc64));
 
 	// Load the IDT
 	lidt(&idt_pd);
@@ -332,6 +335,7 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
+		lock_kernel();
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
