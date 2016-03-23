@@ -460,6 +460,9 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 		return sys_env_set_status((envid_t) a1, (int) a2);
 	case SYS_exofork:
 		return sys_exofork();
+	case SYS_yield:
+		sys_yield();
+		return 0;
 	default:
 		return -E_NO_SYS;
 	}
