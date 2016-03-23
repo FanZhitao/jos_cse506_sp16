@@ -12,6 +12,14 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 
+
+// Lab 3 - Challenge 3 (sysenter/sysexit)
+/*void
+msr_init()
+{
+	asm volatile("wrmsr" :: "a" (GD_KD), "c" ());
+}*/
+
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
 // Destroys the environment on memory errors.
@@ -265,7 +273,7 @@ sys_page_map(envid_t srcenvid, void *srcva,
 		return -E_INVAL;
 	
 	// srcva/dstva have wrong permission
-	if (check_perm(perm) || check_perm(perm))
+	if (check_perm(perm))
 		return -E_INVAL;
 	
 	// srcva is NOT mapped in src address space
@@ -353,7 +361,34 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+
+	struct Env *dstenv;
+	pte_t *pte;
+
+	// Env does not exist
+	if (envid2env(envid, &dstenv, 0))
+		return -E_BAD_ENV;
+
+	// Target env is not ready to receive
+	if (dstenv->env_status != ENV_NOT_RUNNABLE 
+			|| !(dstenv->env_ipc_recving))
+		return -E_IPC_NOT_RECV;
+
+	// Send a page or just a integer 
+	if ((uintptr_t) srcva < UTOP) {
+		sys_page_map(curenv->env_id, srcva, 
+				envid, dstenv->env_ipc_dstva,
+				(int) perm);	
+	} else {
+		dstenv->env_ipc_value = value;
+	}
+
+	dstenv->env_ipc_recving = false;
+	dstenv->env_ipc_from = envid;
+	dstenv->env_ipc_perm = perm;
+	dstenv->env_status = ENV_RUNNABLE;
+
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -371,7 +406,18 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+
+	if (((uintptr_t) dstva) < UTOP) {
+		if (((uintptr_t) dstva) % PGSIZE == 0)
+			curenv->env_ipc_dstva = dstva;
+		else
+			return -E_INVAL;
+	}
+
+	curenv->env_ipc_recving = true;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	sched_yield();
+
 	return 0;
 }
 
