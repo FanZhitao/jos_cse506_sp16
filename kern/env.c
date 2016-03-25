@@ -407,7 +407,7 @@ load_icode(struct Env *e, uint8_t *binary)
 		memmove((uintptr_t *) ph->p_va, 
 			(uintptr_t *) (binary + ph->p_offset), 
 			ph->p_filesz);
-		memset((uintptr_t *) ph->p_va + ph->p_filesz, 
+		memset((uintptr_t *) (ph->p_va + ph->p_filesz), 
 			0, 
 			ph->p_memsz - ph->p_filesz);
 		lcr3(boot_cr3);

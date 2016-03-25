@@ -373,11 +373,11 @@ x64_vm_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
-    boot_map_region(pml4e, 
+    /*boot_map_region(pml4e, 
             (uintptr_t) (KSTACKTOP - KSTKSIZE), 
             KSTKSIZE, 
             (physaddr_t) PADDR(&bootstack[0]),
-            PTE_W);
+            PTE_W);*/
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE. We have detected the number
@@ -907,6 +907,10 @@ mmio_map_region(physaddr_t pa, size_t size)
 	//
 	// Your code here:
 	size_t alloc_size = ROUNDUP(size, PGSIZE); 
+
+	if (base + alloc_size > MMIOLIM)
+		panic("Overflow MMIOLIM");
+
 	boot_map_region(boot_pml4e, base, alloc_size, ROUNDDOWN(pa, PGSIZE), PTE_W | PTE_PCD | PTE_PWT); 
 	base += alloc_size;
 	return (void *)(base - alloc_size);
@@ -937,31 +941,30 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
 	pte_t *pte;
-	uintptr_t va0;
+	uintptr_t va_start, va_end, va0;
 	int i;
 
-	va0 = (uintptr_t) va;
+	va_start = (uintptr_t) ROUNDDOWN(va, PGSIZE);
+	va_end = (uintptr_t) ROUNDUP(va + len, PGSIZE);
 	
 	// Start check on each page
 	//  As per grade script logic:
 	//   return va if check failed on first page
 	//   otherwise, return round-down address
-	for (i = 0; i < len/PGSIZE + 1; i++) {
+	for (va0 = va_start; va0 < va_end; va0 += PGSIZE) {
 
 		// 1.Check ULIM
 		if (va0 >= ULIM) {
-			user_mem_check_addr = va0;
+			user_mem_check_addr = (uintptr_t) va;
 			return -E_FAULT;
 		}
 
 		// 2.Check permission
 		pte = pml4e_walk(env->env_pml4e, (void *) va0, 0);
 		if (pte == NULL || (((*pte) & perm) != perm)) {
-			user_mem_check_addr = va0;
+			user_mem_check_addr = (uintptr_t) va;
 			return -E_FAULT;
 		}
-
-		va0 = ROUNDDOWN(va0, PGSIZE) + PGSIZE;
 	};
 	return 0;
 }
