@@ -147,8 +147,7 @@ trap_init_percpu(void)
 
 	// Initialize the TSS slot of the gdt.
 	//SETTSS((struct SystemSegdesc64 *)((gdt_pd>>16)+40),STS_T64A, (uint64_t) (&ts),sizeof(struct Taskstate), 0);
-	gdt[cur_cpu_gdt_index] = SEG64(STS_T64A, (uint64_t)this_cpu_state, sizeof(struct Taskstate), 0);
-	gdt[cur_cpu_gdt_index].sd_s = 0;
+	SETTSS((struct SystemSegdesc64 *)(&gdt[cur_cpu_gdt_index]), STS_T64A, this_cpu_state, sizeof(struct Taskstate), 0);	
 
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)

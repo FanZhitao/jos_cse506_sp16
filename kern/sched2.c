@@ -35,9 +35,8 @@ sched_yield(void)
 	// If there was a previously running environment, picks it as first
 	if (curenv != 0)
 		i = (curenv->env_id + 1) % NENV;	
-	
-	int end_of_i = i == 0 ? NENV - 1 : i - 1;
-	for (; i != end_of_i; i = (i + 1) % NENV)
+
+	for (; i != ENVX(curenv->env_id); i = (i + 1) % NENV)
 	{
 		struct Env *this_e = &envs[i];
 		if (this_e->env_status == ENV_RUNNABLE)
@@ -47,7 +46,7 @@ sched_yield(void)
 		}
 	}
 
-	if (e == 0 && curenv!= 0 && curenv->env_status == ENV_RUNNING && curenv->env_cpunum == cpunum())
+	if (e == 0 && curenv->env_status == ENV_RUNNING && curenv->env_cpunum == cpunum())
 		e = curenv;
 
 	if (e != 0)
