@@ -31,7 +31,7 @@ pgfault(struct UTrapframe *utf)
 	pte = uvpt[PGNUM(addr)];
 
 	if (!((pte & PTE_W) && (pte & PTE_COW)))
-		panic("Faulting address is not Write && COW page");
+		panic("Faulting address %x is not Write && COW page", addr);
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -89,18 +89,20 @@ duppage(envid_t envid, unsigned pn)
 	if (((uintptr_t) addr) >= UTOP)
 		panic("Address is above UTOP");
 
-	if (!(pte & PTE_W) && !(pte & PTE_COW)) {
+	if (!((pte & PTE_W) || (pte & PTE_COW))) {
 		// 1.Handle read-only page
 		if (sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U))
 			panic("Failed to duppage non-writable/COW page");
+		cprintf("duppage Readonly page at %x\n, addr");
 	} else {
-		// 2.1 Handle writable/COW page
-		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
+		// 2.1 Handle writable/COW page: must be PTE_W|PTE_COW
+		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_W|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
 
 		// 2.2 Mark parent pte as COW as well
-		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
+		if ((r = sys_page_map(srcenvid, addr, srcenvid, addr, PTE_P|PTE_U|PTE_W|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
+		cprintf("duppage Writable/COW page at %x\n", addr);
 	}
 	return 0;
 }
@@ -127,9 +129,10 @@ fork(void)
 	// LAB 4: Your code here.
 	
 	envid_t envid;
-	uint8_t *addr;
+	//uint8_t *addr;
+	uintptr_t va;
 	int r;
-	int i, j, pn;
+	int i, j, k, m, pn;
 	extern unsigned char end[];
 
 	// 1.Set pgfault() as page fault handler before fork
@@ -148,31 +151,87 @@ fork(void)
 		return 0;
 	}
 
-	// 3.Only copy our address mapping into child, not page content.
-	// 	UTEXT =0x800000 where program code located
-	//for (addr = (uint8_t*) UTEXT; addr < end; addr += PGSIZE)
-	//	duppage(envid, addr);
-	//uintptr_t aaa = UTOP;
-	//int bbb = VPD(UTOP);
-	for (i = 0; i < VPD(end); i++) {
-		if (!(uvpd[i] & PTE_P))
+	/*for (i = 0; i < NPMLENTRIES; i++) {
+	 	pn = i;
+		if (!(uvpml4e[pn] & PTE_P))
 			continue;
 
-		for (j = 0; j < 512; j++) {
-			pn = i * 512 + j;
-			if (!(uvpt[pn] & PTE_P))
+		for (j = 0; j < NPDPENTRIES; j++) {
+	 		pn = i * NPMLENTRIES + j;
+			if (!(uvpde[pn] & PTE_P))
 				continue;
-			
-			// UX stack will be mapped later
-			if (pn != PGNUM(UXSTACKTOP-PGSIZE))
-				duppage(envid, pn);
+
+			for (k = 0; k < NPDENTRIES; k++) {
+	 		       	pn = i * NPMLENTRIES + j * NPDPENTRIES + k;
+				if (!(uvpd[pn] & PTE_P))
+	 		       		continue;
+
+	 		       	for (m = 0; m < NPTENTRIES; m++) {
+	 		       		pn = i * NPMLENTRIES + j * NPDPENTRIES + k * NPDENTRIES + m;
+	 		       		if (!(uvpt[pn] & PTE_P))
+	 		       			continue;
+	 		       	
+	 		       		// UX stack will be mapped later
+	 		       		if (pn == PGNUM(UXSTACKTOP-PGSIZE))
+						continue;
+
+					//cprintf("map 0x%x: pml4e=%d, pdpe=%d, pde=%d, pte=%d, pgnum=%d\n", 
+					//		(uintptr_t) (pn*PGSIZE), i, j, k, m, pn);
+	 		       		duppage(envid, pn);
+	 		       }
+			}
 		}
+	}*/
+
+	// 3.Only copy our address mapping into child rather than page content.
+	cprintf("Start copy page table: uvpml4e=%x, uvpde=%x, uvpd=%x, pte=%x\n", uvpml4e, uvpde, uvpd, uvpt);
+	for (va = 0; va < UTOP; va+=PGSIZE) {
+		/**
+		 * Could make it by iterating page table instead of va:
+		 *
+		 * for (i = 0; i < NPMLENTRIES; i++) {
+	 	 *   pn = i;
+		 *   if (!(uvpml4e[pn] & PTE_P)) continue;
+		 *
+		 *   for (j = 0; j < NPDPENTRIES; j++) {
+	 	 *     pn = i*NPMLENTRIES + j;
+		 *     if (!(uvpde[pn] & PTE_P)) continue;
+		 *
+		 *     for (k = 0; k < NPDENTRIES; k++) {
+	 	 *       pn = i*NPMLENTRIES*NPMLENTRIES + j*NPDPENTRIES + k;
+		 *       if (!(uvpd[pn] & PTE_P)) continue;
+		 *
+		 *       for (m = 0; m < NPTENTRIES; m++) {
+	 	 *         pn = i*NPMLENTRIES*NPMLENTRIES*NPMLENTRIES + j*NPDPENTRIES*NPDPENTRIES + k*NPDENTRIES + m;
+	 	 *         if (!(uvpt[pn] & PTE_P)) continue;
+		 * 		......
+		 *
+		 * NOTE: touch uvpt[m] will cause page fault if uvpd[k] is NOT present.
+		 */
+		if (!(uvpml4e[VPML4E(va)] & PTE_P) || 
+				!(uvpde[VPDPE(va)] & PTE_P) ||
+				!(uvpd[VPD(va)] & PTE_P) ||
+				!(uvpt[VPN(va)] & PTE_P))
+			continue;
+
+		if (va == (UXSTACKTOP-PGSIZE))
+			continue;
+
+		duppage(envid, PGNUM(va));
 	}
+	cprintf("Copy page table complete\n");
+	
+	// 4.Allocate new exception stack for child
+	if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP-PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
 
-	// 4.Also copy the stack we are currently running on.
-	//duppage(envid, ROUNDDOWN(&addr, PGSIZE));
+	// 5.Copy page fault handler setup
+	//  set_pgfault_handler() use curenv and upcall wrapper as default
+	//  so we call underlying syscall with wrapper instead
+	if ((r = sys_env_set_pgfault_upcall(envid, thisenv->env_pgfault_upcall)) < 0)
+		panic("sys_env_set_pgfault_upcall: %e", r);	
 
-	// 5.Start the child environment running
+	// 6.Start the child environment running
 	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
 		panic("sys_env_set_status: %e", r);
 
