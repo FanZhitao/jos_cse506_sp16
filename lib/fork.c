@@ -137,11 +137,8 @@ fork(void)
 	// LAB 4: Your code here.
 	
 	envid_t envid;
-	//uint8_t *addr;
 	uintptr_t va;
 	int r;
-	int i, j, k, m, pn;
-	extern unsigned char end[];
 
 	// 1.Set pgfault() as page fault handler before fork
 	set_pgfault_handler(pgfault);
@@ -159,36 +156,49 @@ fork(void)
 		return 0;
 	}
 
-	// 3.Only copy our address mapping into child rather than page content.
-		/** 
-		 * 3.Only copy our address mapping into child rather than page content.
-		 * Could make it by iterating page table instead of va:
-		 *
-		 * for (i = 0; i < NPMLENTRIES; i++) {
-	 	 *   pn = i;
-		 *   if (!(uvpml4e[pn] & PTE_P)) continue;
-		 *
-		 *   for (j = 0; j < NPDPENTRIES; j++) {
-	 	 *     pn = i*NPMLENTRIES + j;
-		 *     if (!(uvpde[pn] & PTE_P)) continue;
-		 *
-		 *     for (k = 0; k < NPDENTRIES; k++) {
-	 	 *       pn = i*NPMLENTRIES*NPMLENTRIES + j*NPDPENTRIES + k;
-		 *       if (!(uvpd[pn] & PTE_P)) continue;
-		 *
-		 *       for (m = 0; m < NPTENTRIES; m++) {
-	 	 *         pn = i*NPMLENTRIES*NPMLENTRIES*NPMLENTRIES + j*NPDPENTRIES*NPDPENTRIES + k*NPDENTRIES + m;
-	 	 *         if (!(uvpt[pn] & PTE_P)) continue;
-		 * 		......
-		 *
-		 * NOTE: touch uvpt[m] will cause page fault if uvpd[k] is NOT present.
-		 */
+	/** 
+	 * 3.Only copy our address mapping into child rather than page content.
+	 * Could make it by iterating page table instead of va:
+	 *
+	 * for (i = 0; i < NPMLENTRIES; i++) {
+ 	 *   pn = i;
+	 *   if (!(uvpml4e[pn] & PTE_P)) continue;
+	 *
+	 *   for (j = 0; j < NPDPENTRIES; j++) {
+ 	 *     pn = i*NPMLENTRIES + j;
+	 *     if (!(uvpde[pn] & PTE_P)) continue;
+	 *
+	 *     for (k = 0; k < NPDENTRIES; k++) {
+ 	 *       pn = i*NPMLENTRIES*NPMLENTRIES + j*NPDPENTRIES + k;
+	 *       if (!(uvpd[pn] & PTE_P)) continue;
+	 *
+	 *       for (m = 0; m < NPTENTRIES; m++) {
+ 	 *         pn = i*NPMLENTRIES*NPMLENTRIES*NPMLENTRIES + j*NPDPENTRIES*NPDPENTRIES + k*NPDENTRIES + m;
+ 	 *         if (!(uvpt[pn] & PTE_P)) continue;
+	 * 		......
+	 *
+	 * NOTE: touch uvpt[m] will cause page fault if uvpd[k] is NOT present.
+	 */
 	cprintf("\n[%08x] Start to copy page table\n", thisenv->env_id);
 	for (va = 0; va < UTOP; va+=PGSIZE) {
-		if (!(uvpml4e[VPML4E(va)] & PTE_P) || 
-				!(uvpde[VPDPE(va)] & PTE_P) ||
-				!(uvpd[VPD(va)] & PTE_P) ||
-				!(uvpt[VPN(va)] & PTE_P))
+
+		// Skip to speed up copy to avoid timeout in forktree test
+		if (!(uvpml4e[VPML4E(va)] & PTE_P)) { 
+			va += ((((uintptr_t) 1) << PML4SHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpde[VPDPE(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDPESHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpd[VPD(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDXSHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpt[VPN(va)] & PTE_P))
 			continue;
 
 		if (va == (UXSTACKTOP-PGSIZE))
@@ -206,7 +216,7 @@ fork(void)
 	//  set_pgfault_handler() use curenv and upcall wrapper as default
 	//  so we call underlying syscall with wrapper instead
 	if ((r = sys_env_set_pgfault_upcall(envid, thisenv->env_pgfault_upcall)) < 0)
-		panic("sys_env_set_pgfault_upcall: %e", r);	
+		panic("sys_env_set_pgfault_upcall: %e", r);
 
 	// 6.Start the child environment running
 	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
