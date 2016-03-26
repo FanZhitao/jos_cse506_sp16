@@ -28,9 +28,9 @@ pgfault(struct UTrapframe *utf)
 	
 	pte_t pte;
 	
-	pte = uvpt[PGNUM(addr)];
-
 	cprintf("[%08x] Start to Copy-On-Write on [0x%x]\n", thisenv->env_id, addr);
+
+	pte = uvpt[PGNUM(addr)];
 
 	// 1.Fault is caused by write and page is COW
 	if (!((err & FEC_WR) && (pte & PTE_COW)))

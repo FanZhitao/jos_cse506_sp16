@@ -378,15 +378,20 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	if ((uintptr_t) srcva < UTOP) {
 		sys_page_map(curenv->env_id, srcva, 
 				envid, dstenv->env_ipc_dstva,
-				(int) perm);	
+				(int) perm);
 	} else {
 		dstenv->env_ipc_value = value;
 	}
 
 	dstenv->env_ipc_recving = false;
-	dstenv->env_ipc_from = envid;
+	dstenv->env_ipc_from = curenv->env_id;
 	dstenv->env_ipc_perm = perm;
 	dstenv->env_status = ENV_RUNNABLE;
+
+	// NOTE: %rax is SYS_ipc_recv(=12) saved
+	//  when sys_ipc_recv() yield CPU. So change it to 0 
+	//  making it seem like successfully return from sys_ipc_recv()
+	dstenv->env_tf.tf_regs.reg_rax = 0;
 
 	return 0;
 }
