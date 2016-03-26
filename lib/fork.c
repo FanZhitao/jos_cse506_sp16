@@ -28,7 +28,7 @@ pgfault(struct UTrapframe *utf)
 	
 	pte_t pte;
 	
-	cprintf("[%08x] Start to Copy-On-Write on [0x%x]\n", thisenv->env_id, addr);
+	//cprintf("[%08x] Start to Copy-On-Write on [0x%x]\n", thisenv->env_id, addr);
 
 	pte = uvpt[PGNUM(addr)];
 
@@ -65,7 +65,7 @@ pgfault(struct UTrapframe *utf)
 	if ((r = sys_page_map(curenvid, (void *) PFTEMP, curenvid, va, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_map: %e", r);
 
-	cprintf("[%08x] Copy-On-Write on [0x%x] complete\n", thisenv->env_id, addr);
+	//cprintf("[%08x] Copy-On-Write on [0x%x] complete\n", thisenv->env_id, addr);
 }
 
 //
@@ -101,9 +101,9 @@ duppage(envid_t envid, unsigned pn)
 		// 1.Handle read-only page
 		if (sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U))
 			panic("Failed to duppage non-writable/COW page");
-		cprintf("duppage Readonly page at %x\n, addr");
+		//cprintf("duppage Readonly page at %x\n, addr");
 	} else {
-		cprintf("[%08x-->%08x] duppage Writable/COW page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
+		//cprintf("[%08x-->%08x] duppage Writable/COW page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
 		// 2.1 Handle writable/COW page
 		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
@@ -115,27 +115,36 @@ duppage(envid_t envid, unsigned pn)
 	return 0;
 }
 
-//
-// User-level fork with copy-on-write.
-// Set up our page fault handler appropriately.
-// Create a child.
-// Copy our address space and page fault handler setup to the child.
-// Then mark the child as runnable and return.
-//
-// Returns: child's envid to the parent, 0 to the child, < 0 on error.
-// It is also OK to panic on error.
-//
-// Hint:
-//   Use uvpd, uvpt, and duppage.
-//   Remember to fix "thisenv" in the child process.
-//   Neither user exception stack should ever be marked copy-on-write,
-//   so you must allocate a new page for the child's user exception stack.
-//
-envid_t
-fork(void)
+static int
+duppage2(envid_t envid, unsigned pn)
 {
+	int r;
+
 	// LAB 4: Your code here.
-	
+	envid_t srcenvid, dstenvid;
+	void *addr;
+
+	srcenvid = 0;
+	dstenvid = envid;
+	addr = (void *) (uintptr_t) (pn*PGSIZE);
+
+	if (((uintptr_t) addr) >= UTOP)
+		panic("Address is above UTOP");
+
+	cprintf("[%08x-->%08x] duppage2 page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
+
+	// 1.Handle read-only page
+	if (sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_W))
+		panic("Failed to duppage2 non-writable/COW page");
+	return 0;
+}
+
+const uint32_t CLONE_NO = 0;
+const uint32_t CLONE_VM = 1;
+
+envid_t
+clone(uint32_t flag)
+{
 	envid_t envid;
 	uintptr_t va;
 	int r;
@@ -152,7 +161,8 @@ fork(void)
 		// The copied value of the global variable 'thisenv'
 		// is no longer valid (it refers to the parent!).
 		// Fix it and return 0.
-		thisenv = &envs[ENVX(sys_getenvid())];
+		// NOTE: for lab 4 - challenge 6 multi-threading
+		//thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	}
 
@@ -179,7 +189,7 @@ fork(void)
 	 *
 	 * NOTE: touch uvpt[m] will cause page fault if uvpd[k] is NOT present.
 	 */
-	cprintf("\n[%08x] Start to copy page table\n", thisenv->env_id);
+	//cprintf("\n[%08x] Start to copy page table\n", thisenv->env_id);
 	for (va = 0; va < UTOP; va+=PGSIZE) {
 
 		// Skip to speed up copy to avoid timeout in forktree test
@@ -204,9 +214,15 @@ fork(void)
 		if (va == (UXSTACKTOP-PGSIZE))
 			continue;
 
-		duppage(envid, PGNUM(va));
+		if ((flag & CLONE_VM) && (va != (USTACKTOP-PGSIZE))) {
+			if ((r = duppage2(envid, PGNUM(va))) < 0)
+				panic("duppage2 at [0x%x]: %e", va, r);
+		} else {
+			if ((r = duppage(envid, PGNUM(va))) < 0)
+				panic("duppage at [0x%x]: %e", va, r);
+		}
 	}
-	cprintf("[%08x] Copy page table complete\n\n", thisenv->env_id);
+	//cprintf("[%08x] Copy page table complete\n\n", thisenv->env_id);
 	
 	// 4.Allocate new exception stack for child
 	if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP-PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
@@ -225,10 +241,32 @@ fork(void)
 	return envid;
 }
 
-// Challenge!
+//
+// User-level fork with copy-on-write.
+// Set up our page fault handler appropriately.
+// Create a child.
+// Copy our address space and page fault handler setup to the child.
+// Then mark the child as runnable and return.
+//
+// Returns: child's envid to the parent, 0 to the child, < 0 on error.
+// It is also OK to panic on error.
+//
+// Hint:
+//   Use uvpd, uvpt, and duppage.
+//   Remember to fix "thisenv" in the child process.
+//   Neither user exception stack should ever be marked copy-on-write,
+//   so you must allocate a new page for the child's user exception stack.
+//
+envid_t
+fork(void)
+{
+	// LAB 4: Your code here.
+	return clone(CLONE_NO);
+}
+
+// Lab 4 - Challenge 6!
 int
 sfork(void)
 {
-	panic("sfork not implemented");
-	return -E_INVAL;
+	return clone(CLONE_VM);
 }

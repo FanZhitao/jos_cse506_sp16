@@ -118,3 +118,115 @@ K>
 -------------------------------------------------------------------------------
 
 
+
+=====================================================================
+			Lab 4 - Challenge 6
+
+1) Extract fork() into a new method clone() reused by sfork().
+   clone() has a flag parameter intended to control the page duplicating way.
+
+-------------------------------------------------------------------------------
+const int32_t CLONE_NO = 0;
+const uint32_t CLONE_VM = 1;
+
+envid_t
+clone(uint32_t flag)
+{
+	envid_t envid;
+	uintptr_t va;
+	int r;
+
+	// 1.Set pgfault() as page fault handler before fork
+	set_pgfault_handler(pgfault);
+
+	// 2.Allocate a new child environment.
+	envid = sys_exofork();
+	if (envid < 0)
+		panic("sys_exofork: %e", envid);
+	if (envid == 0) {
+		// NOTE: for lab 4 - challenge 6 multi-threading
+		//thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	/** 
+	 * 3.Only copy our address mapping into child rather than page content.
+	 * Could make it by iterating page table instead of va:
+	 */
+	for (va = 0; va < UTOP; va+=PGSIZE) {
+
+		// Skip to speed up copy to avoid timeout in forktree test
+		if (!(uvpml4e[VPML4E(va)] & PTE_P)) { 
+			va += ((((uintptr_t) 1) << PML4SHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpde[VPDPE(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDPESHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpd[VPD(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDXSHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpt[VPN(va)] & PTE_P))
+			continue;
+
+		if (va == (UXSTACKTOP-PGSIZE))
+			continue;
+
+		if ((flag & CLONE_VM) && (va != (USTACKTOP-PGSIZE))) {
+			if ((r = duppage2(envid, PGNUM(va))) < 0)
+				panic("duppage2 at [0x%x]: %e", va, r);
+		} else {
+			if ((r = duppage(envid, PGNUM(va))) < 0)
+				panic("duppage at [0x%x]: %e", va, r);
+		}
+	}
+		......
+}
+-------------------------------------------------------------------------------
+
+2) Because all pages except user stack are shared between child processes (thread),
+   I change 'thisenv' to macro calling sys_getenvid() on-the-fly instead of storing env in user space.
+
+-------------------------------------------------------------------------------
+	#define thisenv (&envs[ENVX(sys_getenvid())])
+-------------------------------------------------------------------------------
+
+3) Now test it using user program pingpongs:
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ make run-pingpongs-nox
+		......
+[00000000] new env 00001000
+[00001000] new env 00001001
+[00001000-->00001001] duppage2 page at [0x800000]
+[00001000-->00001001] duppage2 page at [0x801000]
+[00001000-->00001001] duppage2 page at [0x802000]
+[00001000-->00001001] duppage2 page at [0x803000]
+[00001000-->00001001] duppage2 page at [0x804000]
+i am 00001000; thisenv is 0x8000800000
+send 0 from 1000 to 1001
+1001 got 0 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 1 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 2 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 3 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 4 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 5 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 6 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 7 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 8 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 9 from 1001 (thisenv is 0x8000800000 1000)
+[00001000] exiting gracefully
+[00001000] free env 00001000
+1001 got 10 from 1000 (thisenv is 0x8000800120 1001)
+[00001001] exiting gracefully
+[00001001] free env 00001001
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+
