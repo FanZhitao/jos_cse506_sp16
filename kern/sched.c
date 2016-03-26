@@ -49,7 +49,7 @@ sched_yield_roundrobin(void)
 
 	if (e != 0)
 	{
-		cprintf("sched_yield_roundrobin() pick [%08x] env to run\n", e->env_id);
+		//cprintf("sched_yield_roundrobin() pick [%08x] env to run\n", e->env_id);
 		env_run(e);
 	}
 }
