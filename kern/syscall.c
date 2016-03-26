@@ -463,6 +463,10 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 	case SYS_yield:
 		sys_yield();
 		return 0;
+	case SYS_ipc_try_send:
+		return sys_ipc_try_send((envid_t) a1, (uint32_t) a2, (void *) a3, (unsigned) a4);
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void *) a1);
 	default:
 		return -E_NO_SYS;
 	}

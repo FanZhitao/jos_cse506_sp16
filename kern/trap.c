@@ -83,7 +83,8 @@ trap_init(void)
 	for (i = 0; i <= 64; i++) {
 		SETGATE(
 			idt[i],		// GateDesc to set
-			1, 		// istrap or not
+		// NOTE: all interrupts are disabled in kernel
+			0/*1*/, 	// istrap or not
 			GD_KT, 		// selector for handler
 			entrytable[i], 	// offset for handler
 			0 		// DPL 0 for kernel mode
@@ -99,7 +100,7 @@ trap_init(void)
 	
 	// System gate (Trap gate of DPL=3)
 	//  int 0x30/into/bound can be issued in User Mode
-	SETGATE(idt[T_SYSCALL], 1, GD_KT, entrytable[T_SYSCALL], 3);
+	SETGATE(idt[T_SYSCALL], 0/*1*/, GD_KT, entrytable[T_SYSCALL], 3);
 	
 	// System interrupt gate (Interrupt gate of DPL=3)
 	//  int3 can be issued in User Mode by debugger
@@ -299,8 +300,8 @@ trap_dispatch(struct Trapframe *tf)
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
-		//lapic_eoi();
-		//sched_yield();
+		lapic_eoi();
+		sched_yield();
 	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
