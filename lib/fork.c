@@ -30,8 +30,11 @@ pgfault(struct UTrapframe *utf)
 	
 	pte = uvpt[PGNUM(addr)];
 
-	if (!((pte & PTE_W) && (pte & PTE_COW)))
-		panic("Faulting address %x is not Write && COW page", addr);
+	cprintf("[%08x] Start to Copy-On-Write on [0x%x]\n", thisenv->env_id, addr);
+
+	// 1.Fault is caused by write and page is COW
+	if (!((err & FEC_WR) && (pte & PTE_COW)))
+		panic("[%08x] Faulting address [%x] is not caused by write && COW page: rip=[0x%x], pte=[%x], err=[%d]", thisenv->env_id, addr, utf->utf_rip, pte, err);
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -43,21 +46,26 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 
 	envid_t curenvid;
+	void *va;
 
 	// '0' represents current env (handled in envid2env)
 	curenvid = 0;
 
-	// 1.Allocate a new page: pte => PFTEMP
+	// 2.Allocate a new page: pte => PFTEMP
 	if ((r = sys_page_alloc(curenvid, 
 			(void *) PFTEMP, PTE_P|PTE_U|PTE_W)) < 0)
-		panic("allocating at %x in page fault handler: %e", addr, r);
-	
-	// 2.Copy content: [addr,addr+PGSIZE) => [PFTEMP,PFTEMP+PGSIZE)
-	memmove((void *) PFTEMP, addr, PGSIZE);
+		panic("allocating at 0x%x in page fault handler: %e", addr, r);
 
-	// 3.Change mapping: curenv pte of PFTEMP => curenv pte of addr
-	if ((r = sys_page_map(curenvid, (void *) PFTEMP, curenvid, addr, PTE_P|PTE_U|PTE_W)) < 0)
+	va = (void *) ROUNDDOWN(addr, PGSIZE);
+
+	// 3.Copy page content: [va, va+PGSIZE) => [PFTEMP,PFTEMP+PGSIZE)
+	memmove((void *) PFTEMP, va, PGSIZE);
+
+	// 4.Change mapping: curenv pte of PFTEMP => curenv pte of va
+	if ((r = sys_page_map(curenvid, (void *) PFTEMP, curenvid, va, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_map: %e", r);
+
+	cprintf("[%08x] Copy-On-Write on [0x%x] complete\n", thisenv->env_id, addr);
 }
 
 //
@@ -95,14 +103,14 @@ duppage(envid_t envid, unsigned pn)
 			panic("Failed to duppage non-writable/COW page");
 		cprintf("duppage Readonly page at %x\n, addr");
 	} else {
-		// 2.1 Handle writable/COW page: must be PTE_W|PTE_COW
-		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_W|PTE_COW)) < 0)
+		// 2.1 Handle writable/COW page
+		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
 
 		// 2.2 Mark parent pte as COW as well
-		if ((r = sys_page_map(srcenvid, addr, srcenvid, addr, PTE_P|PTE_U|PTE_W|PTE_COW)) < 0)
+		if ((r = sys_page_map(srcenvid, addr, srcenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
-		cprintf("duppage Writable/COW page at %x\n", addr);
+		cprintf("[%08x-->%08x] duppage Writable/COW page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
 	}
 	return 0;
 }
@@ -151,42 +159,9 @@ fork(void)
 		return 0;
 	}
 
-	/*for (i = 0; i < NPMLENTRIES; i++) {
-	 	pn = i;
-		if (!(uvpml4e[pn] & PTE_P))
-			continue;
-
-		for (j = 0; j < NPDPENTRIES; j++) {
-	 		pn = i * NPMLENTRIES + j;
-			if (!(uvpde[pn] & PTE_P))
-				continue;
-
-			for (k = 0; k < NPDENTRIES; k++) {
-	 		       	pn = i * NPMLENTRIES + j * NPDPENTRIES + k;
-				if (!(uvpd[pn] & PTE_P))
-	 		       		continue;
-
-	 		       	for (m = 0; m < NPTENTRIES; m++) {
-	 		       		pn = i * NPMLENTRIES + j * NPDPENTRIES + k * NPDENTRIES + m;
-	 		       		if (!(uvpt[pn] & PTE_P))
-	 		       			continue;
-	 		       	
-	 		       		// UX stack will be mapped later
-	 		       		if (pn == PGNUM(UXSTACKTOP-PGSIZE))
-						continue;
-
-					//cprintf("map 0x%x: pml4e=%d, pdpe=%d, pde=%d, pte=%d, pgnum=%d\n", 
-					//		(uintptr_t) (pn*PGSIZE), i, j, k, m, pn);
-	 		       		duppage(envid, pn);
-	 		       }
-			}
-		}
-	}*/
-
 	// 3.Only copy our address mapping into child rather than page content.
-	cprintf("Start copy page table: uvpml4e=%x, uvpde=%x, uvpd=%x, pte=%x\n", uvpml4e, uvpde, uvpd, uvpt);
-	for (va = 0; va < UTOP; va+=PGSIZE) {
-		/**
+		/** 
+		 * 3.Only copy our address mapping into child rather than page content.
 		 * Could make it by iterating page table instead of va:
 		 *
 		 * for (i = 0; i < NPMLENTRIES; i++) {
@@ -208,6 +183,8 @@ fork(void)
 		 *
 		 * NOTE: touch uvpt[m] will cause page fault if uvpd[k] is NOT present.
 		 */
+	cprintf("\n[%08x] Start to copy page table\n", thisenv->env_id);
+	for (va = 0; va < UTOP; va+=PGSIZE) {
 		if (!(uvpml4e[VPML4E(va)] & PTE_P) || 
 				!(uvpde[VPDPE(va)] & PTE_P) ||
 				!(uvpd[VPD(va)] & PTE_P) ||
@@ -219,7 +196,7 @@ fork(void)
 
 		duppage(envid, PGNUM(va));
 	}
-	cprintf("Copy page table complete\n");
+	cprintf("[%08x] Copy page table complete\n\n", thisenv->env_id);
 	
 	// 4.Allocate new exception stack for child
 	if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP-PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
