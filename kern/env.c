@@ -598,15 +598,13 @@ env_run(struct Env *e)
 	
 	// This is a context switch if curenv is NULL (first run)
 	//  or curenv different from e
-	if (curenv == NULL || curenv->env_id == e->env_id) {
+	if (curenv == NULL || curenv->env_id != e->env_id) {
+		cprintf("env_run() context switch: [%08x] ==> [%08x]\n", 
+				(curenv ? curenv->env_id : 0), e->env_id);
+
 		// 1.Save ctx for curenv
 		if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
 			curenv->env_status = ENV_RUNNABLE;
-			/*curenv->env_tf.tf_ds = GD_UD | 3;
-			curenv->env_tf.tf_es = GD_UD | 3;
-			curenv->env_tf.tf_ss = GD_UD | 3;
-			curenv->env_tf.tf_rsp = USTACKTOP;
-			curenv->env_tf.tf_cs = GD_UT | 3;*/
 		}
 
 		// 2.Restore ctx and switch to newenv

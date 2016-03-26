@@ -7,12 +7,9 @@
 
 void sched_halt(void);
 
-// Choose a user environment to run and run it.
 void
-sched_yield(void)
+sched_yield_roundrobin(void)
 {
-	struct Env *idle;
-
 	// Implement simple round-robin scheduling.
 	//
 	// Search through 'envs' for an ENV_RUNNABLE environment in
@@ -52,8 +49,18 @@ sched_yield(void)
 
 	if (e != 0)
 	{
+		cprintf("sched_yield_roundrobin() pick [%08x] env to run\n", e->env_id);
 		env_run(e);
 	}
+}
+
+// Choose a user environment to run and run it.
+void
+sched_yield(void)
+{
+	struct Env *idle;
+
+	sched_yield_roundrobin();
 
 	// sched_halt never returns
 	sched_halt();

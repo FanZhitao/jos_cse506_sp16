@@ -103,6 +103,7 @@ duppage(envid_t envid, unsigned pn)
 			panic("Failed to duppage non-writable/COW page");
 		cprintf("duppage Readonly page at %x\n, addr");
 	} else {
+		cprintf("[%08x-->%08x] duppage Writable/COW page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
 		// 2.1 Handle writable/COW page
 		if ((r = sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
@@ -110,7 +111,6 @@ duppage(envid_t envid, unsigned pn)
 		// 2.2 Mark parent pte as COW as well
 		if ((r = sys_page_map(srcenvid, addr, srcenvid, addr, PTE_P|PTE_U|PTE_COW)) < 0)
 			panic("sys_page_map: %e", r);
-		cprintf("[%08x-->%08x] duppage Writable/COW page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
 	}
 	return 0;
 }
