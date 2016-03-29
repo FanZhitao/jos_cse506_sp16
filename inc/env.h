@@ -69,6 +69,7 @@ struct Env {
 	envid_t env_ipc_from;		// envid of the sender
 	int env_ipc_perm;		// Perm of page mapping received
     uint8_t *elf;
+    	int tickets; 			// For lab 4 - challenge 2: lottery scheduling
 };
 
 #endif // !JOS_INC_ENV_H

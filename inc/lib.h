@@ -28,7 +28,9 @@ void	umain(int argc, char **argv);
 
 // libmain.c or entry.S
 extern const char *binaryname;
-extern const volatile struct Env *thisenv;
+//extern const volatile struct Env *thisenv;
+// For lab 4 - challenge 6: multi-threading
+#define thisenv (&envs[ENVX(sys_getenvid())])
 extern const volatile struct Env envs[NENV];
 extern const volatile struct PageInfo pages[];
 
@@ -118,6 +120,9 @@ int	pipeisclosed(int pipefd);
 
 // wait.c
 void	wait(envid_t env);
+
+// For lab 4 challenge 2: lottery scheduling
+void sys_set_priority(uint32_t prio);
 
 /* File open modes */
 #define	O_RDONLY	0x0000		/* open for reading only */

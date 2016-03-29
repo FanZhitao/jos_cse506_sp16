@@ -117,3 +117,10 @@ sys_ipc_recv(void *dstva)
 	return syscall(SYS_ipc_recv, 1, (uint64_t)dstva, 0, 0, 0, 0);
 }
 
+// For lab 4 challenge 2: lottery scheduling
+void 
+sys_set_priority(uint32_t prio)
+{
+	syscall(SYS_set_priority, 0, prio, 0, 0, 0, 0);
+}
+

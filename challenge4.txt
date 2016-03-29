@@ -1,3 +1,438 @@
 List challenge problems completed as part of the lab 4 handin, as well
 as the problem number.  If you worked any previous lab challenges and
 submitted them with this lab, list them here, along with the lab number.
+
+
+=====================================================================
+			Lab 4 - Challenge 2
+
+1) I try to implement a simple lottery scheduler without fancy feature like tickets transfer... 
+	A new field 'tickets' is added to struct Env and initialized to 100 as default.
+
+Brief on my solution:
+ 1.1) To minimize the code affected, I calculate total ticket in real time
+ 1.2) Generate a random winning ticket (explained in the following section)
+ 1.3) Find the winner and run it
+-------------------------------------------------------------------------------
+void
+sched_yield_lotteryticket(void)
+{
+	int i, counter, total_tickets, ticket;
+	struct Env *e;
+
+	// 1.Calculate total tickets
+	total_tickets = 0;
+	for (i = 0; i < NENV; i++) {
+		e = &envs[i];
+
+		// Choose env of RUNNABLE or RUNNING on current cpu
+		// This is the situation to halt as well.
+		if (e->env_status == ENV_RUNNABLE ||
+				(e->env_status == ENV_RUNNING &&
+					e->env_cpunum == cpunum()))
+			total_tickets += e->tickets;
+	}
+	//cprintf("This round's total tickets: %d\n", total_tickets);
+
+	if (!total_tickets) {
+		if (curenv != NULL && 
+				curenv->env_status == ENV_RUNNING &&
+				curenv->env_cpunum == cpunum())
+			env_run(curenv);
+		else 
+			return;
+	}
+
+	// 2.Generate randomized ticket
+	ticket = rand(total_tickets);
+	//cprintf("This round's winning ticket: %d\n", ticket);
+
+	// 3.Find winner and run it
+	counter = 0;
+	for (i = 0; i < NENV; i++) {
+		e = &envs[i];
+
+		// Condition must be same as total tickets calculation
+		if (!(e->env_status == ENV_RUNNABLE ||
+				(e->env_status == ENV_RUNNING &&
+					e->env_cpunum == cpunum())))
+			continue;
+
+		counter += e->tickets;
+
+		if (counter > ticket) {
+			//cprintf("This round's winner: %08x\n", e->env_id);
+			env_run(e);
+		}
+	}
+
+	if (curenv != NULL && 
+			curenv->env_status == ENV_RUNNING &&
+			curenv->env_cpunum == cpunum())
+		env_run(curenv);
+}
+
+-------------------------------------------------------------------------------
+
+2) Because we don't have rand() function in JOS yet, I add a simple one:
+
+-------------------------------------------------------------------------------
+/**
+ *  Simple pseudo-random generator implemented in pure C, refering to Linear Feedback shift register
+ *  code snippets on Wikipedia[https://en.wikipedia.org/wiki/Linear_feedback_shift_register]:
+ */
+int
+rand(int limit)
+{
+	static int period = 1;
+	uint16_t start = 0xACE1u;
+	uint16_t lfsr = start;
+	uint16_t bit;
+	int i, rand;
+	do {
+		// 1.Generate random number
+		for (i = 0; i < period; i++) {
+			bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
+			lfsr =  (lfsr >> 1) | (bit << 15);
+		}
+		period++;
+
+		// 2.Place generated number between [0, lotterysize).
+		int randmax = (1 << 16);
+		int divisor = randmax / (limit+1);
+		rand = lfsr / divisor;
+	
+	} while (rand >= limit); 	// 3.Possibly generate rand = limit, if so re-do
+
+	//if (rand < 0 || rand >= limit)
+	//	panic("Bug in rand(): %d", rand);
+	return rand;
+}
+-------------------------------------------------------------------------------
+
+3) In order to allow user program to change 'tickets', an addtional system call is required
+
+-------------------------------------------------------------------------------
+// For lab 4 challenge 2: lottery scheduling
+void
+sys_set_priority(uint32_t prio)
+{
+	curenv->tickets = prio;
+}
+-------------------------------------------------------------------------------
+
+4) Then I create an user program to test my lottery scheduler, which sforks 3 threads. 
+The thread who first finishs the loop will change variable stop to nofity other two thread to stop.
+In order to get the run times of each thread, I increment env_runs whenever env_run() is called.
+
+-------------------------------------------------------------------------------
+
+volatile bool stop = 0;
+
+void
+umain(int argc, char **argv)
+{
+	int i, j;
+	int seen;
+	int assign_tickets[3] = { 100, 200, 400 };
+	envid_t parent = sys_getenvid();
+
+	// sfork 3 'threads' with tickets 100, 200 and 500
+	for (i = 0; i < 3; i++) {
+		if (sfork() == 0) {
+			sys_set_priority(assign_tickets[i]);
+			break;
+		}
+	}
+
+	if (i == 3) {
+		sys_yield();
+		return;
+	}
+
+	// Wait for the parent to finish forking
+	while (envs[ENVX(parent)].env_status != ENV_FREE)
+		asm volatile("pause");
+
+	// Check that one environment doesn't run on two CPUs at once
+	int counter = 0;
+	for (i = 0; i < 1000*1000*100; i++) {
+		if (stop)
+			break;
+		counter++;
+	}
+
+	stop = 1;
+
+	// env_runs does not work. It increment 1 only when context switch.
+	cprintf("\n[%08x] env runs: %d\n\n", thisenv->env_id, thisenv->env_runs);
+}
+-------------------------------------------------------------------------------
+
+5) From the output, we can see the run times are proportional to the amount of tickets assigned to each thread.
+
+NOTE: before the test, please switch scheduler to lottery.
+void
+sched_yield(void)
+{
+	struct Env *idle;
+
+	sched_yield_roundrobin();
+	//sched_yield_lotteryticket();
+
+	// sched_halt never returns
+	sched_halt();
+}
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ make run-lotteryscheduler-nox
+	......
+[00001000] exiting gracefully
+[00001000] free env 00001000
+
+[00001003] env runs: 216
+
+[00001003] exiting gracefully
+[00001003] free env 00001003
+
+[00001002] env runs: 116
+
+[00001002] exiting gracefully
+[00001002] free env 00001002
+
+[00001001] env runs: 74
+
+[00001001] exiting gracefully
+[00001001] free env 00001001
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+-------------------------------------------------------------------------------
+
+=====================================================================
+			Lab 4 - Challenge 5
+
+1) I extract calling _pgfault_upcall logic as an individual function as followed:
+
+-------------------------------------------------------------------------------
+void
+call_user_exception_handler(struct Trapframe *tf, uint64_t fault_va)
+{
+        uintptr_t uxstack;
+        struct UTrapframe *utf;
+                                                                                  
+        // 1.Check if:
+        //  1.1 callback function is setup
+        if (curenv->env_pgfault_upcall) {
+
+                //  1.2 user has allocated UX stack by themself
+                //  1.3 env_pgfault_upcall is accessible for user
+                //  1.4 exception stack isn't overflow
+                user_mem_assert(curenv, (void *) (UXSTACKTOP-PGSIZE), PGSIZE, PTE_U | PTE_W);
+                user_mem_assert(curenv, curenv->env_pgfault_upcall, PGSIZE, PTE_U);
+
+                // 2.If fault caused by fault handler (recursively),
+                //  put new utf at tf_rsp rather than UXSTACKTOP
+                //  and first push an empty 64-bit word.
+                if ((UXSTACKTOP-PGSIZE) <= tf->tf_rsp && tf->tf_rsp <= (UXSTACKTOP-1))
+                        uxstack = tf->tf_rsp - 8;
+                else
+                        uxstack = UXSTACKTOP;
+
+                // 2.Prepare exception stack
+                utf = (struct UTrapframe *) (uxstack - sizeof(struct UTrapframe));
+                utf->utf_fault_va = fault_va;
+                utf->utf_err = tf->tf_err;
+                utf->utf_regs = tf->tf_regs;
+                utf->utf_rip = tf->tf_rip;
+                utf->utf_eflags = tf->tf_eflags;
+                utf->utf_rsp = tf->tf_rsp;
+
+                // 3.Jump to handler wrapper in user space
+                curenv->env_tf.tf_regs.reg_rbp = uxstack;
+                curenv->env_tf.tf_rsp = (uintptr_t) utf;
+                curenv->env_tf.tf_rip = (uintptr_t) curenv->env_pgfault_upcall;
+                env_run(curenv);
+        }
+}
+-------------------------------------------------------------------------------
+
+2) Then it would be reused by other exception handler, let's say divide-zero exception:
+
+-------------------------------------------------------------------------------
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+        // Handle processor exceptions.
+        // LAB 3: Your code here.
+
+        switch (tf->tf_trapno) {
+        case T_DIVIDE:
+                call_user_exception_handler(tf, 0);
+                do_default_handler(tf);
+                return;
+	......
+}
+-------------------------------------------------------------------------------
+
+3) Finally, we can test if callback is working in divide-zero case by adding a user test program:
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ cat user/faultdivzerohandler.c 
+// test user-level fault handler -- just exit when we fault
+
+#include <inc/lib.h>
+
+void
+handler(struct UTrapframe *utf)
+{
+	void *addr = (void*)utf->utf_rip;
+	cprintf("divide zero error at va %x\n", addr);
+	sys_env_destroy(sys_getenvid());
+}
+
+int zero = 0;
+
+void
+umain(int argc, char **argv)
+{
+	set_pgfault_handler(handler);
+	cprintf("1/0 is %08x!\n", 1/zero);
+}
+-------------------------------------------------------------------------------
+
+4) The output are listed as below, which proves that execution path has been redirected to user-mode exception handler:
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ make run-faultdivzerohandler-nox
+
+sed -e "s/localhost:1234/localhost:26002/" -e "s/jumpto_longmode/*0x00000000001000e5/" < obj/kern/kernel.asm .gdbinit.tmpl > .gdbinit
+make[1]: Entering directory `/home/student/lab'
+make[1]: Leaving directory `/home/student/lab'
+qemu-system-x86_64 -nographic -m 256 -hda obj/kern/kernel.img -serial mon:stdio -gdb tcp::26002 -D qemu.log -smp 1 
+6828 decimal is 15254 octal!
+	......
+divide zero error at va 8000d3
+	......
+[00001000] exiting gracefully
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+-------------------------------------------------------------------------------
+
+
+
+=====================================================================
+			Lab 4 - Challenge 6
+
+1) Extract fork() into a new method clone() reused by sfork().
+   clone() has a flag parameter intended to control the page duplicating way.
+
+-------------------------------------------------------------------------------
+const int32_t CLONE_NO = 0;
+const uint32_t CLONE_VM = 1;
+
+envid_t
+clone(uint32_t flag)
+{
+	envid_t envid;
+	uintptr_t va;
+	int r;
+
+	// 1.Set pgfault() as page fault handler before fork
+	set_pgfault_handler(pgfault);
+
+	// 2.Allocate a new child environment.
+	envid = sys_exofork();
+	if (envid < 0)
+		panic("sys_exofork: %e", envid);
+	if (envid == 0) {
+		// NOTE: for lab 4 - challenge 6 multi-threading
+		//thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	/** 
+	 * 3.Only copy our address mapping into child rather than page content.
+	 * Could make it by iterating page table instead of va:
+	 */
+	for (va = 0; va < UTOP; va+=PGSIZE) {
+
+		// Skip to speed up copy to avoid timeout in forktree test
+		if (!(uvpml4e[VPML4E(va)] & PTE_P)) { 
+			va += ((((uintptr_t) 1) << PML4SHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpde[VPDPE(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDPESHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpd[VPD(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDXSHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpt[VPN(va)] & PTE_P))
+			continue;
+
+		if (va == (UXSTACKTOP-PGSIZE))
+			continue;
+
+		if ((flag & CLONE_VM) && (va != (USTACKTOP-PGSIZE))) {
+			if ((r = duppage2(envid, PGNUM(va))) < 0)
+				panic("duppage2 at [0x%x]: %e", va, r);
+		} else {
+			if ((r = duppage(envid, PGNUM(va))) < 0)
+				panic("duppage at [0x%x]: %e", va, r);
+		}
+	}
+		......
+}
+-------------------------------------------------------------------------------
+
+2) Because all pages except user stack are shared between child processes (thread),
+   I change 'thisenv' to macro calling sys_getenvid() on-the-fly instead of storing env in user space.
+
+-------------------------------------------------------------------------------
+	#define thisenv (&envs[ENVX(sys_getenvid())])
+-------------------------------------------------------------------------------
+
+3) Now test it using user program pingpongs:
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ make run-pingpongs-nox
+		......
+[00000000] new env 00001000
+[00001000] new env 00001001
+[00001000-->00001001] duppage2 page at [0x800000]
+[00001000-->00001001] duppage2 page at [0x801000]
+[00001000-->00001001] duppage2 page at [0x802000]
+[00001000-->00001001] duppage2 page at [0x803000]
+[00001000-->00001001] duppage2 page at [0x804000]
+i am 00001000; thisenv is 0x8000800000
+send 0 from 1000 to 1001
+1001 got 0 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 1 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 2 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 3 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 4 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 5 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 6 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 7 from 1001 (thisenv is 0x8000800000 1000)
+1001 got 8 from 1000 (thisenv is 0x8000800120 1001)
+1000 got 9 from 1001 (thisenv is 0x8000800000 1000)
+[00001000] exiting gracefully
+[00001000] free env 00001000
+1001 got 10 from 1000 (thisenv is 0x8000800120 1001)
+[00001001] exiting gracefully
+[00001001] free env 00001001
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+

@@ -68,6 +68,12 @@ KERN_BINFILES +=	user/idle \
 			user/pingpong \
 			user/pingpongs \
 			user/primes
+
+# Binary files for LAB4 - Challenge5
+KERN_BINFILES +=	user/faultdivzerohandler
+# Binary files for LAB4 - Challenge2
+KERN_BINFILES +=	user/lotteryscheduler
+
 # Binary files for LAB5
 KERN_BINFILES +=	user/testfile \
 			user/writemotd \

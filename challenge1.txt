@@ -1,2 +1,83 @@
 List challenge problems completed as part of the lab 1 handin, as well
 as the problem number.
+
+Solution: 
+
+As suggested, I interpret ANSI escape sequences in the text and translate color code to corresponding attribute. Then this attribute is set to each character. Otherwise, if text is not a valid escape sequences, move pointer fmt backward and continue.
+
+```
+// lib/printfmt.c
+int color = 0;
+
+void
+vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
+{
+    register const char *p;
+    register int ch, err;
+    unsigned long long num;
+    int base, lflag, width, precision, altflag;
+    char padc;
+    va_list aq;
+    va_copy(aq,ap);
+    while (1) {    
+        // Check if esc sequence: ESC[3Xm
+        ch = *(unsigned char *) fmt++;
+        if (ch == 0x1B) { // ESC
+            ch = *(unsigned char *) fmt++;
+            if (ch == 0x5B) { // [
+                ch = *(unsigned char *) fmt++;
+                ch = *(unsigned char *) fmt++;
+                if ((*(unsigned char *) fmt++) == 0x6D) { // m
+                    // Match perfectly!
+                    switch (ch) { // X
+                        case '1': color = 0x0400; return; // Red
+                        case '2': color = 0x0200; return; // Green
+                        case '3': color = 0x0600; return; // Yellow
+                        case '4': color = 0x0100; return; // Blue
+                        case '5': color = 0x0500; return; // Magenta
+                        case '6': color = 0x0300; return; // Cyan
+                        case '7': color = 0x0700; return; // White
+                        default:
+                            fmt -= 5;
+                    }
+                }
+                else {
+                    fmt -= 5;
+                }
+            }
+            else {
+                fmt -= 2;
+            }
+        }
+        else {
+            fmt--;
+        }
+        // ...
+    }
+}
+
+// kern/console.c
+extern int color;
+
+static void
+cga_putc(int c)
+{
+        // Set color attribute
+        if (color)
+                c |= color;
+	// ...
+```
+
+Test it now. After we set color attribute by ANSI escape sequences of "\033[31m", "Hello World!" will show in red.
+
+```
+// kern/init.c
+void
+i386_init(void)
+{
+    // ...
+    cprintf("\033[31m");
+    cprintf("Hello World!");
+    // ...
+}
+```
