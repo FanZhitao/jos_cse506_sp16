@@ -388,11 +388,6 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	dstenv->env_ipc_perm = perm;
 	dstenv->env_status = ENV_RUNNABLE;
 
-	// NOTE: %rax is SYS_ipc_recv(=12) saved
-	//  when sys_ipc_recv() yield CPU. So change it to 0 
-	//  making it seem like successfully return from sys_ipc_recv()
-	dstenv->env_tf.tf_regs.reg_rax = 0;
-
 	return 0;
 }
 
@@ -421,12 +416,23 @@ sys_ipc_recv(void *dstva)
 
 	curenv->env_ipc_recving = true;
 	curenv->env_status = ENV_NOT_RUNNABLE;
+
+	// NOTE: %rax is SYS_ipc_recv(=12) saved
+	//  when sys_ipc_recv() yield CPU. So change it to 0 
+	//  making it seem like successfully return from sys_ipc_recv()
+	curenv->env_tf.tf_regs.reg_rax = 0;
+
 	sched_yield();
 
 	return 0;
 }
 
-
+// For lab 4 challenge 2: lottery scheduling
+void
+sys_set_priority(uint32_t prio)
+{
+	curenv->tickets = prio;
+}
 
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -472,6 +478,9 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 		return sys_ipc_try_send((envid_t) a1, (uint32_t) a2, (void *) a3, (unsigned) a4);
 	case SYS_ipc_recv:
 		return sys_ipc_recv((void *) a1);
+	case SYS_set_priority:
+		sys_set_priority((uint32_t) a1);
+		return 0;
 	default:
 		return -E_NO_SYS;
 	}

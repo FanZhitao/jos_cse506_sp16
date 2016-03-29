@@ -84,6 +84,8 @@ KERN_BINFILES +=	user/idle \
 
 # Binary files for LAB4 - Challenge5
 KERN_BINFILES +=	user/faultdivzerohandler
+# Binary files for LAB4 - Challenge2
+KERN_BINFILES +=	user/lotteryscheduler
 
 KERN_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))
 KERN_OBJFILES := $(patsubst %.S, $(OBJDIR)/%.o, $(KERN_OBJFILES))

@@ -3,6 +3,212 @@ as the problem number.  If you worked any previous lab challenges and
 submitted them with this lab, list them here, along with the lab number.
 
 
+=====================================================================
+			Lab 4 - Challenge 2
+
+1) I try to implement a simple lottery scheduler without fancy feature like tickets transfer... 
+	A new field 'tickets' is added to struct Env and initialized to 100 as default.
+
+Brief on my solution:
+ 1.1) To minimize the code affected, I calculate total ticket in real time
+ 1.2) Generate a random winning ticket (explained in the following section)
+ 1.3) Find the winner and run it
+-------------------------------------------------------------------------------
+void
+sched_yield_lotteryticket(void)
+{
+	int i, counter, total_tickets, ticket;
+	struct Env *e;
+
+	// 1.Calculate total tickets
+	total_tickets = 0;
+	for (i = 0; i < NENV; i++) {
+		e = &envs[i];
+
+		// Choose env of RUNNABLE or RUNNING on current cpu
+		// This is the situation to halt as well.
+		if (e->env_status == ENV_RUNNABLE ||
+				(e->env_status == ENV_RUNNING &&
+					e->env_cpunum == cpunum()))
+			total_tickets += e->tickets;
+	}
+	//cprintf("This round's total tickets: %d\n", total_tickets);
+
+	if (!total_tickets) {
+		if (curenv != NULL && 
+				curenv->env_status == ENV_RUNNING &&
+				curenv->env_cpunum == cpunum())
+			env_run(curenv);
+		else 
+			return;
+	}
+
+	// 2.Generate randomized ticket
+	ticket = rand(total_tickets);
+	//cprintf("This round's winning ticket: %d\n", ticket);
+
+	// 3.Find winner and run it
+	counter = 0;
+	for (i = 0; i < NENV; i++) {
+		e = &envs[i];
+
+		// Condition must be same as total tickets calculation
+		if (!(e->env_status == ENV_RUNNABLE ||
+				(e->env_status == ENV_RUNNING &&
+					e->env_cpunum == cpunum())))
+			continue;
+
+		counter += e->tickets;
+
+		if (counter > ticket) {
+			//cprintf("This round's winner: %08x\n", e->env_id);
+			env_run(e);
+		}
+	}
+
+	if (curenv != NULL && 
+			curenv->env_status == ENV_RUNNING &&
+			curenv->env_cpunum == cpunum())
+		env_run(curenv);
+}
+
+-------------------------------------------------------------------------------
+
+2) Because we don't have rand() function in JOS yet, I add a simple one:
+
+-------------------------------------------------------------------------------
+/**
+ *  Simple pseudo-random generator implemented in pure C, refering to Linear Feedback shift register
+ *  code snippets on Wikipedia[https://en.wikipedia.org/wiki/Linear_feedback_shift_register]:
+ */
+int
+rand(int limit)
+{
+	static int period = 1;
+	uint16_t start = 0xACE1u;
+	uint16_t lfsr = start;
+	uint16_t bit;
+	int i, rand;
+	do {
+		// 1.Generate random number
+		for (i = 0; i < period; i++) {
+			bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
+			lfsr =  (lfsr >> 1) | (bit << 15);
+		}
+		period++;
+
+		// 2.Place generated number between [0, lotterysize).
+		int randmax = (1 << 16);
+		int divisor = randmax / (limit+1);
+		rand = lfsr / divisor;
+	
+	} while (rand >= limit); 	// 3.Possibly generate rand = limit, if so re-do
+
+	//if (rand < 0 || rand >= limit)
+	//	panic("Bug in rand(): %d", rand);
+	return rand;
+}
+-------------------------------------------------------------------------------
+
+3) In order to allow user program to change 'tickets', an addtional system call is required
+
+-------------------------------------------------------------------------------
+// For lab 4 challenge 2: lottery scheduling
+void
+sys_set_priority(uint32_t prio)
+{
+	curenv->tickets = prio;
+}
+-------------------------------------------------------------------------------
+
+4) Then I create an user program to test my lottery scheduler, which sforks 3 threads. 
+The thread who first finishs the loop will change variable stop to nofity other two thread to stop.
+In order to get the run times of each thread, I increment env_runs whenever env_run() is called.
+
+-------------------------------------------------------------------------------
+
+volatile bool stop = 0;
+
+void
+umain(int argc, char **argv)
+{
+	int i, j;
+	int seen;
+	int assign_tickets[3] = { 100, 200, 400 };
+	envid_t parent = sys_getenvid();
+
+	// sfork 3 'threads' with tickets 100, 200 and 500
+	for (i = 0; i < 3; i++) {
+		if (sfork() == 0) {
+			sys_set_priority(assign_tickets[i]);
+			break;
+		}
+	}
+
+	if (i == 3) {
+		sys_yield();
+		return;
+	}
+
+	// Wait for the parent to finish forking
+	while (envs[ENVX(parent)].env_status != ENV_FREE)
+		asm volatile("pause");
+
+	// Check that one environment doesn't run on two CPUs at once
+	int counter = 0;
+	for (i = 0; i < 1000*1000*100; i++) {
+		if (stop)
+			break;
+		counter++;
+	}
+
+	stop = 1;
+
+	// env_runs does not work. It increment 1 only when context switch.
+	cprintf("\n[%08x] env runs: %d\n\n", thisenv->env_id, thisenv->env_runs);
+}
+-------------------------------------------------------------------------------
+
+5) From the output, we can see the run times are proportional to the amount of tickets assigned to each thread.
+
+NOTE: before the test, please switch scheduler to lottery.
+void
+sched_yield(void)
+{
+	struct Env *idle;
+
+	sched_yield_roundrobin();
+	//sched_yield_lotteryticket();
+
+	// sched_halt never returns
+	sched_halt();
+}
+
+-------------------------------------------------------------------------------
+student@vl56:~/lab$ make run-lotteryscheduler-nox
+	......
+[00001000] exiting gracefully
+[00001000] free env 00001000
+
+[00001003] env runs: 216
+
+[00001003] exiting gracefully
+[00001003] free env 00001003
+
+[00001002] env runs: 116
+
+[00001002] exiting gracefully
+[00001002] free env 00001002
+
+[00001001] env runs: 74
+
+[00001001] exiting gracefully
+[00001001] free env 00001001
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+-------------------------------------------------------------------------------
 
 =====================================================================
 			Lab 4 - Challenge 5

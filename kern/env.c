@@ -282,6 +282,9 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	env_free_list = e->env_link;
 	*newenv_store = e;
 
+	// For lab 4 - challenge 2: lottery scheduling
+	e->tickets = 100;
+
 	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 	return 0;
 }
@@ -614,6 +617,9 @@ env_run(struct Env *e)
 
 		// NOTE: lcr3 must be real physical address!
 		lcr3(PADDR(curenv->env_pml4e));
+	} else {
+		// For lab 4 challenge 2: test lottery scheduling
+		curenv->env_runs++;
 	}
 
 	unlock_kernel();

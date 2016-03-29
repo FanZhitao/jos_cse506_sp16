@@ -79,7 +79,8 @@ envid_t	ipc_find_env(enum EnvType type);
 envid_t	fork(void);
 envid_t	sfork(void);	// Challenge!
 
-
+// For lab 4 challenge 2: lottery scheduling
+void sys_set_priority(uint32_t prio);
 
 /* File open modes */
 #define	O_RDONLY	0x0000		/* open for reading only */

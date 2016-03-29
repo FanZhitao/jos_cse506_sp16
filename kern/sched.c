@@ -54,6 +54,96 @@ sched_yield_roundrobin(void)
 	}
 }
 
+/**
+ *  Simple pseudo-random generator implemented in pure C, refering to Linear Feedback shift register
+ *  code snippets on Wikipedia[https://en.wikipedia.org/wiki/Linear_feedback_shift_register]:
+ */
+int
+rand(int limit)
+{
+	static int period = 1;
+	uint16_t start = 0xACE1u;
+	uint16_t lfsr = start;
+	uint16_t bit;
+	int i, rand;
+	do {
+		// 1.Generate random number
+		for (i = 0; i < period; i++) {
+			bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
+			lfsr =  (lfsr >> 1) | (bit << 15);
+		}
+		period++;
+
+		// 2.Place generated number between [0, lotterysize).
+		int randmax = (1 << 16);
+		int divisor = randmax / (limit+1);
+		rand = lfsr / divisor;
+	
+	} while (rand >= limit); 	// 3.Possibly generate rand = limit, if so re-do
+
+	//if (rand < 0 || rand >= limit)
+	//	panic("Bug in rand(): %d", rand);
+	return rand;
+}
+
+void
+sched_yield_lotteryticket(void)
+{
+	int i, counter, total_tickets, ticket;
+	struct Env *e;
+
+	// 1.Calculate total tickets
+	total_tickets = 0;
+	for (i = 0; i < NENV; i++) {
+		e = &envs[i];
+
+		// Choose env of RUNNABLE or RUNNING on current cpu
+		// This is the situation to halt as well.
+		if (e->env_status == ENV_RUNNABLE ||
+				(e->env_status == ENV_RUNNING &&
+					e->env_cpunum == cpunum()))
+			total_tickets += e->tickets;
+	}
+	//cprintf("This round's total tickets: %d\n", total_tickets);
+
+	if (!total_tickets) {
+		if (curenv != NULL && 
+				curenv->env_status == ENV_RUNNING &&
+				curenv->env_cpunum == cpunum())
+			env_run(curenv);
+		else 
+			return;
+	}
+
+	// 2.Generate randomized ticket
+	ticket = rand(total_tickets);
+	//cprintf("This round's winning ticket: %d\n", ticket);
+
+	// 3.Find winner and run it
+	counter = 0;
+	for (i = 0; i < NENV; i++) {
+		e = &envs[i];
+
+		// Condition must be same as total tickets calculation
+		if (!(e->env_status == ENV_RUNNABLE ||
+				(e->env_status == ENV_RUNNING &&
+					e->env_cpunum == cpunum())))
+			continue;
+
+		counter += e->tickets;
+
+		if (counter > ticket) {
+			//cprintf("This round's winner: %08x\n", e->env_id);
+			env_run(e);
+		}
+	}
+
+	if (curenv != NULL && 
+			curenv->env_status == ENV_RUNNING &&
+			curenv->env_cpunum == cpunum())
+		env_run(curenv);
+}
+
 // Choose a user environment to run and run it.
 void
 sched_yield(void)
@@ -61,6 +151,7 @@ sched_yield(void)
 	struct Env *idle;
 
 	sched_yield_roundrobin();
+	//sched_yield_lotteryticket();
 
 	// sched_halt never returns
 	sched_halt();
