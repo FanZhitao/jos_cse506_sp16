@@ -48,8 +48,14 @@ bc_pgfault(struct UTrapframe *utf)
 	// Hint: first round addr to page boundary.
 	//
 	// LAB 5: your code here:
-
-	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+	void *addr_aligned = ROUNDDOWN(addr, BLKSIZE);
+	uint32_t secno = ((uint64_t)addr_aligned - DISKMAP) / SECTSIZE;
+	envid_t envid = thisenv->env_id;
+	if (sys_page_alloc(envid, addr_aligned, PTE_SYSCALL) != 0)
+		panic("sys_page_alloc failed at %08x\n", addr_aligned);
+	if (ide_read(secno, addr_aligned, BLKSECTS) != 0)
+		panic("reading disk failed at sector %d\n", secno); 
+	if ((r = sys_page_map(envid, addr_aligned, envid, addr_aligned, PTE_SYSCALL)) < 0)
 		panic("in bc_pgfault, sys_page_map: %e", r);
 
 	// Check that the block we read was allocated. (exercise for
@@ -75,7 +81,17 @@ flush_block(void *addr)
 		panic("flush_block of bad va %08x", addr);
 
 	// LAB 5: Your code here.
-	panic("flush_block not implemented");
+	void *addr_aligned = ROUNDDOWN(addr, BLKSIZE);
+	envid_t envid = thisenv->env_id;
+	//cprintf("flush block at %08x\n", addr_aligned);
+	if (!va_is_mapped(addr_aligned) || !va_is_dirty(addr_aligned))
+		return;
+	uint32_t secno = ((uint64_t)addr - DISKMAP)/ SECTSIZE;
+	//cprintf("write at sector %d\n", secno);
+	if (ide_write(secno, addr_aligned, BLKSECTS) != 0)
+		panic("writing disk failed at sector %d\n", secno);	
+	if (sys_page_map(envid, addr_aligned, envid, addr_aligned, PTE_SYSCALL) != 0)
+		panic("sys_page_map call error in flush_block.");	
 }
 
 // Test that the block cache works, by smashing the superblock and
