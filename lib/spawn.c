@@ -301,6 +301,45 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+
+	uintptr_t va;
+	envid_t srcenvid, dstenvid;
+	void *addr;
+	int r;
+
+	for (va = 0; va < UTOP; va+=PGSIZE) {
+
+		// Skip to speed up copy to avoid timeout in forktree test
+		if (!(uvpml4e[VPML4E(va)] & PTE_P)) { 
+			va += ((((uintptr_t) 1) << PML4SHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpde[VPDPE(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDPESHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpd[VPD(va)] & PTE_P)) {
+			va += ((((uintptr_t) 1) << PDXSHIFT) - PGSIZE);
+			continue;
+		}
+
+		if (!(uvpt[VPN(va)] & PTE_P))
+			continue;
+
+		if (va == (UXSTACKTOP-PGSIZE))
+			continue;
+
+		if ((uvpt[VPN(va)] & PTE_SHARE) && (va != (USTACKTOP-PGSIZE))) {
+			srcenvid = 0;
+			dstenvid = child;
+
+			if ((r = sys_page_map(srcenvid, (void *) va, dstenvid, (void *) va, PTE_P|PTE_U|PTE_W)) < 0)
+				panic("sys_page_map at [0x%x]: %e", va, r);
+		}
+	}
+
 	return 0;
 }
 

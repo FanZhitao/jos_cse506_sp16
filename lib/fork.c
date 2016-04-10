@@ -217,6 +217,10 @@ clone(uint32_t flag)
 		if ((flag & CLONE_VM) && (va != (USTACKTOP-PGSIZE))) {
 			if ((r = duppage2(envid, PGNUM(va))) < 0)
 				panic("duppage2 at [0x%x]: %e", va, r);
+		// Lab 5: share fd state if pte is PTE_SHARE
+		} else if ((flag & CLONE_NO) && (uvpt[VPN(va)] & PTE_SHARE)) {
+			if ((r = duppage2(envid, PGNUM(va))) < 0)
+				panic("duppage2 at [0x%x]: %e", va, r);
 		} else {
 			if ((r = duppage(envid, PGNUM(va))) < 0)
 				panic("duppage at [0x%x]: %e", va, r);
