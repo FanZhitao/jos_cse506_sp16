@@ -170,7 +170,7 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 	// address!
 
 	struct Env *env;
-	void *va = (void *) tf;
+	void *va = (void *) ROUNDDOWN(tf, PGSIZE);
 
 	// Env does not exist
 	if (envid2env(envid, &env, 1))

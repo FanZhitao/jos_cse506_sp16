@@ -89,7 +89,8 @@ open(const char *path, int mode)
 		return r;
 	}
 
-	return fd->fd_file.id;
+	//return fd->fd_file.id;
+	return fd2num(fd);
 }
 
 // Flush the file descriptor.  After this the fileid is invalid.
