@@ -791,21 +791,21 @@ boot_map_region(pml4e_t *pml4e, uintptr_t la, size_t size, physaddr_t pa, int pe
 int
 page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 {
-        pte_t *pte = pml4e_walk(pml4e, va, 0);
-        //if (pte != NULL) {
-        if ((pte != NULL) && ((*pte) & PTE_P)) {
-                // There is already a page mapped at 'va', it should be page_remove()d.
-                page_remove(pml4e, va);
-        }
-        pte = pml4e_walk(pml4e, va, 1);
+        pte_t *pte = pml4e_walk(pml4e, va, 1);
         if (pte == NULL) {
                 //  page table couldn't be allocated
                 return -E_NO_MEM;
         }
+	// increase ref to avoid corner case found in Lab 5
+	// when pp is the same
+        pp->pp_ref++;
+        if ((*pte) & PTE_P) {
+                // There is already a page mapped at 'va', it should be page_remove()d.
+                page_remove(pml4e, va);
+        }
 
         // The insertion succeeds.
         (*pte) = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
-        pp->pp_ref++;
 
 	return 0;
 }
