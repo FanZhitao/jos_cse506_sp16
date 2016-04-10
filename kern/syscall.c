@@ -133,6 +133,28 @@ sys_env_set_status(envid_t envid, int status)
 	return 0;
 }
 
+// Check if va is valid (above UTOP and page-aligned)
+static int
+check_va_valid(void *va)
+{
+	return (((uintptr_t) va) >= UTOP 
+		|| (((uintptr_t) va) % PGSIZE != 0));
+}
+
+// PTE_P and PTE_U must be set, PTE_AVAIL or PTE_W may be set or not
+static int
+check_perm(int perm)
+{
+	int pu, pua, puw, puaw;
+
+	pu = PTE_P | PTE_U;
+	pua = pu | PTE_AVAIL;
+	puw = pu | PTE_W;
+	puaw = pua | PTE_W;
+
+	return (!((perm & pu) || (perm & pua) || (perm & puw) || (perm & puaw)));
+}
+
 // Set envid's trap frame to 'tf'.
 // tf is modified to make sure that user environments always run at code
 // protection level 3 (CPL 3) with interrupts enabled.
@@ -146,7 +168,21 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 	// LAB 5: Your code here.
 	// Remember to check whether the user has supplied us with a good
 	// address!
-	panic("sys_env_set_trapframe not implemented");
+
+	struct Env *env;
+	void *va = (void *) tf;
+
+	// Env does not exist
+	if (envid2env(envid, &env, 1))
+		return -E_BAD_ENV;
+
+	// va >= UTOP or not aligned or perm is inappropriate
+	if (check_va_valid(va) || check_perm(PTE_W))
+		return -E_INVAL;
+
+	env->env_tf = *tf;
+
+	return 0;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -168,28 +204,6 @@ sys_env_set_pgfault_upcall(envid_t envid, void *func)
 
 	env->env_pgfault_upcall = func;
 	return 0;
-}
-
-// Check if va is valid (above UTOP and page-aligned)
-int
-check_va_valid(void *va)
-{
-	return (((uintptr_t) va) >= UTOP 
-		|| (((uintptr_t) va) % PGSIZE != 0));
-}
-
-// PTE_P and PTE_U must be set, PTE_AVAIL or PTE_W may be set or not
-int
-check_perm(int perm)
-{
-	int pu, pua, puw, puaw;
-
-	pu = PTE_P | PTE_U;
-	pua = pu | PTE_AVAIL;
-	puw = pu | PTE_W;
-	puaw = pua | PTE_W;
-
-	return (!((perm & pu) || (perm & pua) || (perm & puw) || (perm & puaw)));
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -276,7 +290,7 @@ sys_page_map(envid_t srcenvid, void *srcva,
 
 	// srcenvid/dstenvid do NOT exist or have wrong permission
 	if (envid2env(srcenvid, &srcenv, 1) || 
-			envid2env(dstenvid, &dstenv, 1))
+			envid2env(dstenvid, &dstenv, 0))
 		return -E_BAD_ENV;
 	
 	// srcva/dstva are above UTOP, page-aligned
@@ -376,6 +390,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 
 	struct Env *dstenv;
 	pte_t *pte;
+	int r;
 
 	// Env does not exist
 	if (envid2env(envid, &dstenv, 0))
@@ -386,14 +401,14 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 			|| !(dstenv->env_ipc_recving))
 		return -E_IPC_NOT_RECV;
 
-	// Send a page or just a integer 
+	// Send a page with an integer 
 	if ((uintptr_t) srcva < UTOP) {
-		sys_page_map(curenv->env_id, srcva, 
+		if ((r = sys_page_map(curenv->env_id, srcva, 
 				envid, dstenv->env_ipc_dstva,
-				(int) perm);
-	} else {
-		dstenv->env_ipc_value = value;
-	}
+				(int) perm)) < 0)
+			return r;
+	} 
+	dstenv->env_ipc_value = value;
 
 	dstenv->env_ipc_recving = false;
 	dstenv->env_ipc_from = curenv->env_id;
@@ -493,6 +508,9 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 	case SYS_set_priority:
 		sys_set_priority((uint32_t) a1);
 		return 0;
+	case SYS_env_set_trapframe:
+		user_mem_assert(curenv, (struct Trapframe *) a2, sizeof(struct Trapframe), PTE_W);
+		return sys_env_set_trapframe((envid_t) a1, (struct Trapframe *) a2);
 	default:
 		return -E_NO_SYS;
 	}
