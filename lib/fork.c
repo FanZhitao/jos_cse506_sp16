@@ -139,8 +139,8 @@ duppage2(envid_t envid, unsigned pn)
 	return 0;
 }
 
-const uint32_t CLONE_NO = 0;
-const uint32_t CLONE_VM = 1;
+const uint32_t CLONE_NO = 1;
+const uint32_t CLONE_VM = 2;
 
 envid_t
 clone(uint32_t flag)
