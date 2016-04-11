@@ -175,9 +175,18 @@ file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
 	// LAB 5: Your code here.
 	uint32_t *ppdiskbno;
-	int ret = file_block_walk(f, filebno, &ppdiskbno, 1);
+	int ret = file_block_walk(f, filebno, &ppdiskbno, 0);
 	if (ret == -E_NO_DISK || ret == -E_INVAL)
 		return ret;
+
+	if (*ppdiskbno == 0)
+	{
+		// may happen after resetting file size
+		// need to allocate a page
+		if ((ret = alloc_block()) < 0)
+			return -E_NO_DISK;
+		*ppdiskbno = ret; 
+	}
 	*blk = diskaddr(*ppdiskbno);
 	return 0;
 }
