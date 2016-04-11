@@ -626,7 +626,8 @@ env_run(struct Env *e)
 		lcr3(PADDR(curenv->env_pml4e));
 	} else {
 		// For lab 4 challenge 2: test lottery scheduling
-		curenv->env_runs++;
+		// NOTE: cause bug in _pipeisclosed()!
+		//curenv->env_runs++;
 	}
 
 	unlock_kernel();
