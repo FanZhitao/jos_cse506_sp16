@@ -134,7 +134,7 @@ duppage2(envid_t envid, unsigned pn)
 	cprintf("[%08x-->%08x] duppage2 page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
 
 	// 1.Handle read-only page
-	if (sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_W))
+	if (sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_W|PTE_SHARE))
 		panic("Failed to duppage2 non-writable/COW page");
 	return 0;
 }
