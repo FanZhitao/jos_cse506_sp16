@@ -154,28 +154,34 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 	else
 	{
 		// indirect block
-		if (f->f_indirect == 0 && alloc == 0)
-			return -E_NOT_FOUND;
-
-		if (alloc == 1)
+		if (f->f_indirect == 0)
 		{
-			int r;
-			if (f->f_indirect == 0)
+			if (alloc == 0)
+				return -E_NOT_FOUND;
+			else // alloc == 1
 			{
+				int r;
 				if ((r = alloc_block()) < 0)
 					return -E_NO_DISK;
 
 				f->f_indirect = r;
 			}
-
-			if ((r = alloc_block()) < 0)
-				return -E_NO_DISK;
-
-			*ppdiskbno = (uint32_t *)diskaddr(f->f_indirect) + filebno - NDIRECT;
-			**ppdiskbno = r;
 		}
 
 		*ppdiskbno = (uint32_t *)diskaddr(f->f_indirect) + filebno - NDIRECT;
+		if (*ppdiskbno == 0)
+		{
+			if (alloc == 0)
+				return -E_NOT_FOUND;
+			else // alloc == 1
+			{
+				int r;
+				if ((r = alloc_block()) < 0)
+					return -E_NO_DISK;
+
+				**ppdiskbno = r;
+			}
+		}
 	}
 
 	return 0;
