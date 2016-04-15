@@ -337,7 +337,7 @@ copy_shared_pages(envid_t child)
 
 			//cprintf("[%08x-->%08x] copy shared page at [0x%x]\n", thisenv->env_id, dstenvid, va);
 
-			if ((r = sys_page_map(srcenvid, (void *) va, dstenvid, (void *) va, PTE_P|PTE_U|PTE_W)) < 0)
+			if ((r = sys_page_map(srcenvid, (void *) va, dstenvid, (void *) va, PTE_P|PTE_U|PTE_W|PTE_SHARE)) < 0)
 				panic("sys_page_map at [0x%x]: %e", va, r);
 		} else {
 			//cprintf("copy shared page do nothing at [0x%x]\n", va);
