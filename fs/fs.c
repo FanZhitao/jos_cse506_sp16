@@ -157,6 +157,24 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 		if (f->f_indirect == 0 && alloc == 0)
 			return -E_NOT_FOUND;
 
+		if (alloc == 1)
+		{
+			int r;
+			if (f->f_indirect == 0)
+			{
+				if ((r = alloc_block()) < 0)
+					return -E_NO_DISK;
+
+				f->f_indirect = r;
+			}
+
+			if ((r = alloc_block()) < 0)
+				return -E_NO_DISK;
+
+			*ppdiskbno = (uint32_t *)diskaddr(f->f_indirect) + filebno - NDIRECT;
+			**ppdiskbno = r;
+		}
+
 		*ppdiskbno = (uint32_t *)diskaddr(f->f_indirect) + filebno - NDIRECT;
 	}
 
@@ -174,8 +192,8 @@ int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
 	// LAB 5: Your code here.
-	uint32_t *ppdiskbno;
-	int ret = file_block_walk(f, filebno, &ppdiskbno, 0);
+	uint32_t *ppdiskbno = 0;
+	int ret = file_block_walk(f, filebno, &ppdiskbno, 1);
 	if (ret == -E_NO_DISK || ret == -E_INVAL)
 		return ret;
 

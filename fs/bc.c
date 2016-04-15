@@ -55,7 +55,7 @@ bc_pgfault(struct UTrapframe *utf)
 	if (ide_read(secno, addr_aligned, BLKSECTS) != 0)
 		panic("reading disk failed at sector %d\n", secno); 
 
-	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+	if ((r = sys_page_map(0, addr_aligned, 0, addr_aligned, uvpt[PGNUM(addr_aligned)] & PTE_SYSCALL)) < 0)
 		panic("in bc_pgfault, sys_page_map: %e", r);
 
 	// Check that the block we read was allocated. (exercise for
