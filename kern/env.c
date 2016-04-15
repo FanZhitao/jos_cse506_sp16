@@ -286,7 +286,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	// For lab 4 - challenge 2: lottery scheduling
 	e->tickets = 100;
 
-	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
+	//cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 	return 0;
 }
 

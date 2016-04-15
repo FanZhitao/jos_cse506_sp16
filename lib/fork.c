@@ -131,7 +131,7 @@ duppage2(envid_t envid, unsigned pn)
 	if (((uintptr_t) addr) >= UTOP)
 		panic("Address is above UTOP");
 
-	cprintf("[%08x-->%08x] duppage2 page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
+	//cprintf("[%08x-->%08x] duppage2 page at [0x%x]\n", thisenv->env_id, dstenvid, addr);
 
 	// 1.Handle read-only page
 	if (sys_page_map(srcenvid, addr, dstenvid, addr, PTE_P|PTE_U|PTE_W|PTE_SHARE))
