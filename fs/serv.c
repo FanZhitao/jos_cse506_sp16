@@ -31,7 +31,8 @@
 
 struct OpenFile {
 	uint32_t o_fileid;	// file id
-	struct File *o_file;	// mapped descriptor for open file
+	//struct File *o_file;	// mapped descriptor for open file
+	struct inode *o_file;
 	int o_mode;		// open mode
 	struct Fd *o_fd;	// Fd page
 };
@@ -104,7 +105,7 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	   void **pg_store, int *perm_store)
 {
 	char path[MAXPATHLEN];
-	struct File *f;
+	struct inode *f;
 	int fileid;
 	int r;
 	struct OpenFile *o;
@@ -322,6 +323,23 @@ serve_sync(envid_t envid, union Fsipc *req)
 	return 0;
 }
 
+// Lab 5 - Challenge 4
+int
+serve_link(envid_t envid, struct Fsreq_link *req)
+{
+	char srcpath[MAXPATHLEN];
+	char dstpath[MAXPATHLEN];
+
+	// Copy in the path, making sure it's null-terminated
+	memmove(srcpath, req->src_path, MAXPATHLEN);
+	srcpath[MAXPATHLEN-1] = 0;
+	memmove(dstpath, req->dst_path, MAXPATHLEN);
+	dstpath[MAXPATHLEN-1] = 0;
+
+	return file_link(srcpath, dstpath);
+}
+
+
 typedef int (*fshandler)(envid_t envid, union Fsipc *req);
 
 fshandler handlers[] = {
@@ -333,7 +351,9 @@ fshandler handlers[] = {
 	[FSREQ_SET_SIZE] =	(fshandler)serve_set_size,
 	[FSREQ_WRITE] =		(fshandler)serve_write,
 	[FSREQ_REMOVE] =	(fshandler)serve_remove,
-	[FSREQ_SYNC] =		serve_sync
+	[FSREQ_SYNC] =		serve_sync,
+	// Lab 5 - Challenge 4
+	[FSREQ_LINK] = 		(fshandler)serve_link
 };
 #define NHANDLERS (sizeof(handlers)/sizeof(handlers[0]))
 

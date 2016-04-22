@@ -85,7 +85,7 @@ flush_block(void *addr)
 	//cprintf("flush block at %08x\n", addr_aligned);
 	if (!va_is_mapped(addr_aligned) || !va_is_dirty(addr_aligned))
 		return;
-	uint32_t secno = ((uint64_t)addr - DISKMAP)/ SECTSIZE;
+	uint32_t secno = ((uint64_t)addr_aligned - DISKMAP)/ SECTSIZE;
 	//cprintf("write at sector %d\n", secno);
 	if (ide_write(secno, addr_aligned, BLKSECTS) != 0)
 		panic("writing disk failed at sector %d\n", secno);	

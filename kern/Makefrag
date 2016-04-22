@@ -73,6 +73,8 @@ KERN_BINFILES +=	user/idle \
 KERN_BINFILES +=	user/faultdivzerohandler
 # Binary files for LAB4 - Challenge2
 KERN_BINFILES +=	user/lotteryscheduler
+# Binary files for LAB5 - Challenge4
+KERN_BINFILES +=	user/ln
 
 # Binary files for LAB5
 KERN_BINFILES +=	user/testfile \

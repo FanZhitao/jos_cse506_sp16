@@ -23,7 +23,7 @@ void
 lsdir(const char *path, const char *prefix)
 {
 	int fd, n;
-	struct File f;
+	struct inode f;
 
 	if ((fd = open(path, O_RDONLY)) < 0)
 		panic("open %s: %e", path, fd);

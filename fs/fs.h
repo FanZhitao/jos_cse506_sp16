@@ -14,6 +14,11 @@
 struct Super *super;		// superblock
 uint32_t *bitmap;		// bitmap blocks mapped in memory
 
+// Lab 5 - Challenge 4
+uint32_t *ibitmap;
+struct inode *itable;
+int file_link(const char *srcpath, const char *dstpath);
+
 /* ide.c */
 bool	ide_probe_disk1(void);
 void	ide_set_disk(int diskno);
@@ -29,13 +34,13 @@ void	bc_init(void);
 
 /* fs.c */
 void	fs_init(void);
-int	file_get_block(struct File *f, uint32_t file_blockno, char **pblk);
-int	file_create(const char *path, struct File **f);
-int	file_open(const char *path, struct File **f);
-ssize_t	file_read(struct File *f, void *buf, size_t count, off_t offset);
-int	file_write(struct File *f, const void *buf, size_t count, off_t offset);
-int	file_set_size(struct File *f, off_t newsize);
-void	file_flush(struct File *f);
+int	file_get_block(struct inode *f, uint32_t file_blockno, char **pblk);
+int	file_create(const char *path, struct inode **f);
+int	file_open(const char *path, struct inode **f);
+ssize_t	file_read(struct inode *f, void *buf, size_t count, off_t offset);
+int	file_write(struct inode *f, const void *buf, size_t count, off_t offset);
+int	file_set_size(struct inode *f, off_t newsize);
+void	file_flush(struct inode *f);
 int	file_remove(const char *path);
 void	fs_sync(void);
 

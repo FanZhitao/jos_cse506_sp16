@@ -9,7 +9,7 @@ static char *msg = "This is the NEW message of the day!\n\n";
 void
 fs_test(void)
 {
-	struct File *f;
+	struct inode *f;
 	int r;
 	char *blk;
 	uint32_t *bits;
@@ -39,7 +39,7 @@ fs_test(void)
 	if ((r = file_get_block(f, 0, &blk)) < 0)
 		panic("file_get_block: %e", r);
 	if (strcmp(blk, msg) != 0)
-		panic("file_get_block returned wrong data");
+		panic("file_get_block returned wrong data: %s", blk);
 	cprintf("file_get_block is good\n");
 
 	*(volatile char*)blk = *(volatile char*)blk;

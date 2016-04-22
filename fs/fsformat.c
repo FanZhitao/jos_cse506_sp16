@@ -41,7 +41,7 @@ typedef int bool;
 
 struct Dir
 {
-	struct File *f;
+	struct inode *f;
 	struct File *ents;
 	int n;
 };
@@ -62,6 +62,28 @@ panic(const char *fmt, ...)
         fputc('\n', stderr);
 	abort();
 }
+
+// ---------------------------------------------
+// 		Lab 5 - Challenge 4
+// ---------------------------------------------
+uint32_t *ibitmap;
+struct inode *itable;
+
+static
+uint32_t
+alloc_inode()
+{
+	int i;
+	for (i = 0; i < 32; i++) {
+		if (ibitmap[i / 32] & (1 << (i % 32))) {
+			ibitmap[i/32] &= ~(1<<(i%32));
+			return i;
+		}
+	}
+	panic("No free inode");
+	return 0;
+}
+// ---------------------------------------------
 
 void
 readn(int f, void *out, size_t n)
@@ -122,6 +144,12 @@ opendisk(const char *name)
 	nbitblocks = (nblocks + BLKBITSIZE - 1) / BLKBITSIZE;
 	bitmap = alloc(nbitblocks * BLKSIZE);
 	memset(bitmap, 0xFF, nbitblocks * BLKSIZE);
+
+	// Lab 5 - Challenge 4
+	ibitmap = alloc(BLKSIZE);
+	memset(ibitmap, 0xFF, BLKSIZE);
+	itable = alloc(BLKSIZE * 2);
+	memset(itable, 0x0, BLKSIZE * 2);
 }
 
 void
@@ -137,7 +165,7 @@ finishdisk(void)
 }
 
 void
-finishfile(struct File *f, uint32_t start, uint32_t len)
+finishfile(struct inode *f, uint32_t start, uint32_t len)
 {
 	int i;
 	f->f_size = len;
@@ -153,22 +181,32 @@ finishfile(struct File *f, uint32_t start, uint32_t len)
 }
 
 void
-startdir(struct File *f, struct Dir *dout)
+startdir(struct inode *f, struct Dir *dout)
 {
 	dout->f = f;
 	dout->ents = malloc(MAX_DIR_ENTS * sizeof *dout->ents);
 	dout->n = 0;
 }
 
-struct File *
+struct inode *
 diradd(struct Dir *d, uint32_t type, const char *name)
 {
 	struct File *out = &d->ents[d->n++];
 	if (d->n > MAX_DIR_ENTS)
 		panic("too many directory entries");
 	strcpy(out->f_name, name);
-	out->f_type = type;
-	return out;
+	//out->f_type = type;
+	//return out;
+
+	// Lab 5 - Challenge 4
+	uint32_t i_ino = alloc_inode();
+	struct inode *inode = &itable[i_ino];
+	strcpy(inode->f_name, name);
+	inode->f_type = type;
+	inode->i_ino = i_ino;
+	inode->i_nlink = 1;
+	out->i_ino = i_ino;
+	return inode;
 }
 
 void
@@ -186,7 +224,7 @@ void
 writefile(struct Dir *dir, const char *name)
 {
 	int r, fd;
-	struct File *f;
+	struct inode *f;
 	struct stat st;
 	const char *last;
 	char *start;
@@ -228,7 +266,7 @@ main(int argc, char **argv)
 	struct Dir root;
 	int flag=FLAG_ROOT;
 	struct Dir bin, sbin;
-	struct File *b, *sb;
+	struct inode *b, *sb;
 
 	assert(BLKSIZE % sizeof(struct File) == 0);
 
