@@ -11,6 +11,7 @@
 #include <kern/syscall.h>
 #include <kern/console.h>
 #include <kern/sched.h>
+#include <kern/time.h>
 
 
 // Lab 3 - Challenge 3 (sysenter/sysexit)
@@ -460,6 +461,14 @@ void
 sys_set_priority(uint32_t prio)
 {
 	curenv->tickets = prio;
+}
+
+// Return the current time.
+static int
+sys_time_msec(void)
+{
+	// LAB 6: Your code here.
+	panic("sys_time_msec not implemented");
 }
 
 

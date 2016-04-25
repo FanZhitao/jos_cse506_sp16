@@ -124,3 +124,8 @@ sys_set_priority(uint32_t prio)
 	syscall(SYS_set_priority, 0, prio, 0, 0, 0, 0);
 }
 
+unsigned int
+sys_time_msec(void)
+{
+	return (unsigned int) syscall(SYS_time_msec, 0, 0, 0, 0, 0, 0);
+}
