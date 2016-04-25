@@ -24,6 +24,39 @@ va_is_dirty(void *va)
 	return (uvpt[PGNUM(va)] & PTE_D) != 0;
 }
 
+// -------------------------------------------------------------
+// Lab 5 - Challenge 2 Eviction of Block Cache
+
+static void
+bc_reclaim()
+{
+	uintptr_t va;
+	int ntol, nacc;
+       	double usage;
+
+	// 1.Calculate usage
+	ntol = (DISKSIZE / BLKSIZE);
+	nacc = 0;
+	for (va = DISKMAP; va < (DISKMAP+DISKSIZE); va+=BLKSIZE) {
+		if (!va_is_mapped((void *) va))
+			continue;
+
+		if (uvpt[PGNUM(va)] & PTE_A)
+			nacc++;
+	}
+
+	// 2.Perform reclaimation if low memory
+	//cprintf("  total=%d, access=%d\n", ntol, nacc);
+	//usage = (double) (1 / ntol);
+
+	if (nacc >= 10) {
+		//cprintf("  Perform reclaimation: total=%d, access=%d, usage=%f\n", ntol, nacc, usage);
+		//cprintf("   va %08x is accessed\n", va);
+		cprintf("Reclaim!!!\n");
+	}
+}
+// -------------------------------------------------------------
+
 // Fault any disk block that is read in to memory by
 // loading it from disk.
 // Hint: Use ide_read and BLKSECTS.
@@ -42,6 +75,9 @@ bc_pgfault(struct UTrapframe *utf)
 	// Sanity check the block number.
 	if (super && blockno >= super->s_nblocks)
 		panic("reading non-existent block %08x\n", blockno);
+
+	// Lab 5 - Challenge 2 Eviction of Block Cache
+	//bc_reclaim();
 
 	// Allocate a page in the disk map region, read the contents
 	// of the block from the disk into that page.

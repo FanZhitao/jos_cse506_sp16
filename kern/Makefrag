@@ -75,6 +75,8 @@ KERN_BINFILES +=	user/faultdivzerohandler
 KERN_BINFILES +=	user/lotteryscheduler
 # Binary files for LAB5 - Challenge4
 KERN_BINFILES +=	user/ln
+# Binary files for LAB5 - Challenge5: add unix-style exec
+KERN_BINFILES +=	user/exechello
 
 # Binary files for LAB5
 KERN_BINFILES +=	user/testfile \

@@ -11,6 +11,128 @@ static int map_segment(envid_t child, uintptr_t va, size_t memsz,
 		       int fd, size_t filesz, off_t fileoffset, int perm);
 static int copy_shared_pages(envid_t child);
 
+// Lab 5 - Challenge 6: implement mmap
+#define PROT_EXEC 1
+#define PROT_READ 2
+#define PROT_WRITE 4
+#define PROT_NONE 8
+
+#define MAP_SHARED 1
+#define MAP_PRIVATE 2
+#define MAP_ANON 4
+#define MAP_FIXED 8
+
+static
+int mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+	int i, r;
+	uintptr_t va;
+
+	va = (uintptr_t) addr;
+	if ((i = PGOFF(va))) {
+		va -= i;
+		length += i;
+		//memsz += i;
+		//filesz += i;
+		offset -= i;
+	}
+
+	for (i = 0; i < length; i += PGSIZE) {
+		va += i;
+		if (i > 0)
+			return 0;
+		cprintf("mmap addr: %08x\n", va);
+
+		if ((r = sys_page_alloc(0, (void *) va, PTE_P|PTE_U|PTE_W)) < 0)
+			return r;
+		if ((r = seek(fd, offset + i)) < 0)
+			return r;
+		if ((r = readn(fd, (void *) va, MIN(PGSIZE, length-i))) < 0)
+			return r;
+		//if ((r = sys_page_map(0, UTEMP, child, (void*) ((uintptr_t) addr + i), perm)) < 0)
+		//	panic("spawn: sys_page_map data: %e", r);
+	}
+	return 0;
+}
+
+// Lab 5 - Challenge 5: Add unix-style exec
+int exec(const char *prog, const char *arg0, ...)
+{
+	// 1.Handle var-arg
+	// We calculate argc by advancing the args until we hit NULL.
+	int argc=0;
+	va_list vl;
+	va_start(vl, arg0);
+	while(va_arg(vl, void *) != NULL)
+		argc++;
+	va_end(vl);
+
+	// Now that we have the size of the args, do a second pass for argv
+	const char *argv[argc+2];
+	argv[0] = arg0;
+	argv[argc+1] = NULL;
+
+	va_start(vl, arg0);
+	int i;
+	for(i=0;i<argc;i++)
+		argv[i+1] = va_arg(vl, const char *);
+	va_end(vl);
+
+	// 2.Start to execute!
+	unsigned char elf_buf[512];
+	struct Trapframe child_tf;
+	envid_t child;
+	int fd, r;
+	struct Elf *elf;
+	struct Proghdr *ph;
+	int perm;
+
+	// 2.1 Open ELF file
+	if ((r = open(prog, O_RDONLY)) < 0)
+		return r;
+	fd = r;
+
+	// 2.2 Check ELF header
+	elf = (struct Elf*) elf_buf;
+	if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)
+	    || elf->e_magic != ELF_MAGIC) {
+		close(fd);
+		cprintf("elf magic %08x want %08x\n", elf->e_magic, ELF_MAGIC);
+		return -E_NOT_EXEC;
+	}
+
+	// 2.3 Map program segments as defined in ELF header
+	child = sys_getenvid();
+	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
+	for (i = 0; i < elf->e_phnum; i++, ph++) {
+		if (ph->p_type != ELF_PROG_LOAD)
+			continue;
+		perm = PTE_P | PTE_U;
+		if (ph->p_flags & ELF_PROG_FLAG_WRITE)
+			perm |= PTE_W;
+
+		if ((r = mmap((void *) ph->p_va, ph->p_memsz, perm, perm, fd, ph->p_offset)) < 0) {
+			sys_env_destroy(child);
+			close(fd);
+		}
+	}
+	close(fd);
+	fd = -1;
+
+	// 2.4 Init stack
+	child_tf = envs[ENVX(child)].env_tf;
+	child_tf.tf_rip = elf->e_entry;
+	if ((r = init_stack(child, argv, &child_tf.tf_rsp)) < 0)
+		return r;
+
+	// 3.Yield to let kernel re-run myself with new TF
+	cprintf("  Yield!!!\n");
+	sys_yield();
+
+	return 0;
+}
+// ----------------------------------------------------
+
 // Spawn a child process from a program image loaded from the file system.
 // prog: the pathname of the program to run.
 // argv: pointer to null-terminated array of pointers to strings,

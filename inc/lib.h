@@ -109,6 +109,8 @@ int	pageref(void *addr);
 // spawn.c
 envid_t	spawn(const char *program, const char **argv);
 envid_t	spawnl(const char *program, const char *arg0, ...);
+// Lab 5 - Challenge 5: Add unix-style exec
+int 	exec(const char *program, const char *arg, ...);
 
 // console.c
 void	cputchar(int c);
