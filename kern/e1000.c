@@ -4,7 +4,7 @@
 
 // LAB 6: Your driver code here
 
-#define E1000_STATUS  		0x00008  /* Device Status - RO */
+#define E1000_STATUS  	(0x00008/4)  /* Device Status - RO */
 #define E1000_STATUS_FD         0x00000001      /* Full duplex.0=half,1=full */
 
 // use 'volatile' to avoid cache and reorder access to this memory
