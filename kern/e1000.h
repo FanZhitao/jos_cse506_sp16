@@ -16,5 +16,7 @@ struct tx_desc
 
 int init_e1000(struct pci_func *pcif);
 
+int send_packet(void *packet, size_t len);
+
 #endif	// JOS_KERN_E1000_H
 
