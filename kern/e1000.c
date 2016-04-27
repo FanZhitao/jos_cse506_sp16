@@ -22,6 +22,7 @@
 #define E1000_TCTL_CT 	0x00000ff0    /* collision threshold */
 #define E1000_TCTL_COLD 0x003ff000    /* collision distance */
 
+#define E1000_TXD_CMD_EOP    	(0x01000000>>24) /* End of Packet */
 #define E1000_TXD_CMD_RS 	(0x08000000>>24) /* Report Status */
 #define E1000_TXD_STAT_DD 	0x00000001 /* Descriptor Done */
 
@@ -59,18 +60,15 @@ int init_e1000(struct pci_func *pcif)
 
 	// 3.Initialize Transmit Ring Buffer and relevant registers
 	for (i = 0; i < MAX_TX_NUM; i++) {
-		tx_ring[i].addr = (uint64_t) (pkt_bufs + i);
-		tx_ring[i].cmd |= E1000_TXD_CMD_RS;
+		tx_ring[i].addr = (uint64_t) PADDR(pkt_bufs + i);
 		tx_ring[i].status |= E1000_TXD_STAT_DD;
 	}
-	cprintf("tx_ring: %016llx\n", tx_ring);
 	netipc[E1000_TDBAL] = (uint64_t) PADDR(tx_ring);
 	netipc[E1000_TDBAH] = ((uint64_t) PADDR(tx_ring))>>32;
 	netipc[E1000_TDLEN] = MAX_TX_NUM * sizeof(struct tx_desc);
 	netipc[E1000_TDH] = 0x0;
 	netipc[E1000_TDT] = 0x0;
-	cprintf("TDBAL: %016llx\n", netipc[E1000_TDBAL]);
-	cprintf("TDBAH: %016llx\n", netipc[E1000_TDBAH]);
+	cprintf("TDBAL: %016llx, TDBAH: %016llx\n", netipc[E1000_TDBAL], netipc[E1000_TDBAH]);
 
 	// 4.Initialize Transmit Control Register
 	netipc[E1000_TCTL] |= E1000_TCTL_EN; 
@@ -79,12 +77,13 @@ int init_e1000(struct pci_func *pcif)
 	netipc[E1000_TCTL] |= (0x40<<12); 
 	cprintf("TCTL: %016llx\n", netipc[E1000_TCTL]);
 
-	netipc[E1000_TIPG] |= 10;
+	// NOTE: According to the IEEE802.3 standard, IPGR1 should be 2/3 of IPGR2 value.
+	netipc[E1000_TIPG] = (0x6<<20) | (0x4<<10) | (0xa<<0);
 	cprintf("TIPG: %016llx\n", netipc[E1000_TIPG]);
 
 	// Test send packet
-	send_packet("hello world", 10);
-	send_packet("world hello", 15);
+	send_packet("hello world", 64);
+	send_packet("world hello", 128);
 
 	return 0;
 }
@@ -102,9 +101,11 @@ int send_packet(void *packet, size_t len)
 	tx->status &= ~E1000_TXD_STAT_DD;
 
 	// 2.Copy buffer and update TDT
-	memcpy((void *) (tx->addr), packet, len); 
+	memcpy((void *) KADDR(tx->addr), packet, len); 
 	tx->length = len;
 	netipc[E1000_TDT] += 1;
+
+	tx->cmd |= (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
 
 	return 0;
 }
