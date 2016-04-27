@@ -82,8 +82,8 @@ int init_e1000(struct pci_func *pcif)
 	cprintf("TIPG: %016llx\n", netipc[E1000_TIPG]);
 
 	// Test send packet
-	send_packet("hello world", 64);
-	send_packet("world hello", 128);
+	//send_packet("hello world", 64);
+	//send_packet("world hello", 128);
 
 	return 0;
 }
