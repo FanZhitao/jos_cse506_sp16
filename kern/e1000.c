@@ -61,6 +61,7 @@ int init_e1000(struct pci_func *pcif)
 	for (i = 0; i < MAX_TX_NUM; i++) {
 		tx_ring[i].addr = (uint64_t) (pkt_bufs + i);
 		tx_ring[i].cmd |= E1000_TXD_CMD_RS;
+		tx_ring[i].status |= E1000_TXD_STAT_DD;
 	}
 	cprintf("tx_ring: %016llx\n", tx_ring);
 	netipc[E1000_TDBAL] = (uint64_t) PADDR(tx_ring);
@@ -82,8 +83,8 @@ int init_e1000(struct pci_func *pcif)
 	cprintf("TIPG: %016llx\n", netipc[E1000_TIPG]);
 
 	// Test send packet
-	//send_packet("hello world", 10);
-	//send_packet("world hello", 15);
+	send_packet("hello world", 10);
+	send_packet("world hello", 15);
 
 	return 0;
 }
@@ -94,11 +95,13 @@ int send_packet(void *packet, size_t len)
 
 	// 1.Check if ring buffer is full
 	tx = &tx_ring[netipc[E1000_TDT]];
-	if (tx->status & E1000_TXD_STAT_DD) {
+	if (!(tx->status & E1000_TXD_STAT_DD)) {
 		cprintf("Transmitting ring buffer is full\n");
 		return -1;
 	}
+	tx->status &= ~E1000_TXD_STAT_DD;
 
+	// 2.Copy buffer and update TDT
 	memcpy((void *) (tx->addr), packet, len); 
 	tx->length = len;
 	netipc[E1000_TDT] += 1;
