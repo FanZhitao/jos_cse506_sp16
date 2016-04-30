@@ -18,6 +18,9 @@ struct tx_desc tx_ring[MAX_TX_NUM];
 
 struct pkt_buf pkt_bufs[MAX_TX_NUM];
 
+struct e1000_rx_desc rx_ring[N_RX_NUM];
+struct pkt_buf rx_pkt_bufs[N_RX_NUM];
+
 static void init_e1000_transmit(void)
 {
 	int i;
@@ -52,7 +55,63 @@ static void init_e1000_transmit(void)
 
 static void init_e1000_receive(void)
 {
+	int i;
+	uintptr_t pa;
+	memset(rx_ring, 0, sizeof(struct e1000_rx_desc) * N_RX_NUM);
+	memset(rx_pkt_bufs, 0, sizeof(struct pkt_buf) * N_RX_NUM);
+	for (i = 0; i < N_RX_NUM; i++)
+	{
+		pa = (uintptr_t)PADDR(rx_pkt_bufs+i);
+		rx_ring[i].buffer_addr = (uintptr_t)PADDR(rx_pkt_bufs + i);
+	}
 
+	// Program the Receive Address Register(s) (RAL/RAH) with the desired Ethernet addresses.
+	// hardcoded mac address: 52:54:00:12:34:56
+	// TODO: challenge - read form EEPROM
+	netipc[E1000_RAL(0)] = 0x12005452; // low-order 32 bits
+	netipc[E1000_RAH(0)] = 0x5634 | E1000_RAH_AV; // high-order 16 bits with "Address Valid" bit 
+
+	// Initialize the MTA (Multicast Table Array) to 0b.
+	netipc[E1000_MTA] = 0;
+
+	// Program the Interrupt Mask Set/Read (IMS) register to enable any interrupt
+	// the software driver wants to be notified of when the event occurs.
+	// Disable it here.
+	netipc[E1000_IMS] = 0;
+
+	// Allocate a region of memory for the receive descriptor list.
+	// Software should insure this memory is aligned on a paragraph (16-byte) boundary.
+	// Program the Receive Descriptor Base Address (RDBAL/RDBAH) register(s) with the address
+	// of the region.
+	pa = (uintptr_t)PADDR(rx_ring);
+	netipc[E1000_RDBAL] = pa;
+	netipc[E1000_RDBAH] = pa >> 32;
+
+	// Set the Receive Descriptor Length (RDLEN) register to the size (in bytes) of the descriptor ring.
+	// This register must be 128-byte aligned.
+	netipc[E1000_RDLEN] = sizeof(struct e1000_rx_desc) * N_RX_NUM;
+
+	// Receive buffers of appropriate size should be allocated and pointers to these buffers
+	// should be allocated and pointers to these buffers should be stored in the receive descriptor ring.
+	// Head should point to the first valid receive descriptor in the descriptor ring and tail
+	// should point to one descriptor beyond the last valid descriptor in the descriptor ring.
+	pa = (uintptr_t)PADDR(rx_ring);
+	netipc[E1000_RDH] = 0;
+	netipc[E1000_RDT] = N_RX_NUM - 1;
+
+	// Program the Receive Control (RCTL) register with appropriate values
+	// for desired operation to include the following:
+	//
+	// Set the receiver Enable (RECT.EN) bit to 1b.
+	netipc[E1000_RCTL] |= E1000_RCTL_EN;
+	// Configure the Receive Buffer Size (RCTL.BSIZE) bits to reflect the size
+	// of the receive buffers software provides to hardware.
+	netipc[E1000_RCTL] |= E1000_RCTL_SZ_1024;
+	// Set the Broadcast Accept Mode (RCTL.BAM) bit to 1b allowing the hardware
+	// to accept broadcast packets.
+	netipc[E1000_RCTL] |= E1000_RCTL_BAM;
+	// Set the Strip Ethernet CRC (RCTL.SECRC) to strip the CRC.
+	netipc[E1000_RCTL] |= E1000_RCTL_SECRC; // set strip Etherenet CRC on
 }
 
 int init_e1000(struct pci_func *pcif)
