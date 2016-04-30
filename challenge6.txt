@@ -2,6 +2,61 @@ List challenge problems completed as part of the lab 6 handin, as well
 as the problem number.  If you worked any previous lab challenges and
 submitted them with this lab, list them here, along with the lab number.
 
+================================================================
+		Lab 6a - Challenge 2: Zero-Copy
+================================================================
+
+Since user-space buffer is already mapped into OUTPUT env during IPC,
+we could get physical address of user buffer through OUTPUT page table.
+Then rather than copy user buffer to transmit ring buffer, we pass 
+the its physical address to network device directly.
+
+For simplicity, we forget the pre-allocated ring buffer for a moment.
+We can restore the address in Transmit Descriptor easily later.
+
+At last, add a new system call named sys_send_packet_direct() and
+let OUTPUT env use the new function to send packet.
+
+int send_packet_direct(void *packet, size_t len)
+{
+	struct tx_desc *tx;
+	struct PageInfo *srcpp;
+	pte_t *pte;
+
+	// 1.Check if ring buffer is full
+	tx = &tx_ring[netipc[E1000_TDT]];
+	if (!(tx->status & E1000_TXD_STAT_DD)) {
+		cprintf("Transmitting ring buffer is full\n");
+		return -1;
+	}
+	tx->status &= ~E1000_TXD_STAT_DD;
+
+	// 2.Copy buffer and update TDT
+	//memcpy((void *) KADDR(tx->addr), packet, len); 
+	
+	/*
+	 * Challenge 2: Zero-copy transmit
+	 * 	Rather than copy, use user-space buffer directly, which is already mapped in OUTPUT env during IPC.
+	 * 	So try to get its corresponding physical address with OUTPUT page table, and pass it to network device.
+	 */
+	if (!(srcpp = page_lookup(curenv->env_pml4e, packet, &pte)))
+		return -1;
+	tx->addr = page2pa(srcpp) + PGOFF(packet);
+	tx->length = len;
+
+	// 3.Set RS bit to make NIC report status when send complete
+	tx->cmd |= (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
+
+	netipc[E1000_TDT] = (netipc[E1000_TDT] + 1) % MAX_TX_NUM;
+
+	return 0;
+}
+
+
+================================================================
+		Lab 5 - Challenge 4: Add Inode
+================================================================
+
 1) Add 'struct inode' with metadata moved from 'struct File' which makes 'struct File' real dir entry:
 -------------------------------------------------------------------------
 struct File {

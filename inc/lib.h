@@ -64,6 +64,8 @@ int	sys_ipc_recv(void *rcv_pg);
 unsigned int sys_time_msec(void);
 // Lab 6a: network driver
 int 	sys_send_packet(void *packet, size_t len);
+// Lab 6a - Challenge 2: Zero-copy transmit
+int 	sys_send_packet_direct(void *packet, size_t len);
 
 
 // This must be inlined.  Exercise for reader: why?

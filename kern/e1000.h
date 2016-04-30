@@ -2,8 +2,10 @@
 #define JOS_KERN_E1000_H
 
 #include <kern/pci.h>
+#include <inc/env.h>
 
 #define E1000_STATUS 	(0x00008/4)  /* Device Status - RO */
+#define E1000_EECD     	(0x00010/4)  /* EEPROM/Flash Control - RW */
 #define E1000_TCTL 	(0x00400/4)  /* TX Control - RW */
 #define E1000_TIPG 	(0x00410/4)  /* TX Inter-packet gap -RW */
 #define E1000_TDBAL 	(0x03800/4)  /* TX Descriptor Base Address Low - RW */
@@ -13,6 +15,9 @@
 #define E1000_TDT 	(0x03818/4)  /* TX Descripotr Tail - RW */
 
 #define E1000_STATUS_FD	0x00000001    /* Full duplex.0=half,1=full */
+
+#define E1000_EECD_REQ 	0x00000040 /* EEPROM Access Request */
+#define E1000_EECD_GNT 	0x00000080 /* EEPROM Access Grant */
 
 #define E1000_TCTL_EN 	0x00000002    /* enable tx */
 #define E1000_TCTL_PSP 	0x00000008    /* pad short packets */
@@ -45,6 +50,7 @@ struct pkt_buf {
 
 int init_e1000(struct pci_func *pcif);
 int send_packet(void *packet, size_t len);
+int send_packet_direct(void *packet, size_t len);
 
 #endif	// JOS_KERN_E1000_H
 

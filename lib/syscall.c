@@ -136,3 +136,9 @@ sys_send_packet(void *packet, size_t len)
 	return syscall(SYS_send_packet, 1, (uint64_t) packet, len, 0, 0, 0);
 }
 
+// Lab 6a - Challenge 2: Zero-copy transmit
+int
+sys_send_packet_direct(void *packet, size_t len)
+{
+	return syscall(SYS_send_packet_direct, 1, (uint64_t) packet, len, 0, 0, 0);
+}
