@@ -24,7 +24,7 @@
 #define E1000_TXD_STAT_DD 	0x00000001 /* Descriptor Done */
 
 #define MAX_TX_NUM 32
-#define MAX_BUF_SIZE 1520
+#define MAX_BUF_SIZE 1518
 
 struct tx_desc
 {

@@ -89,10 +89,11 @@ int send_packet(void *packet, size_t len)
 	// 2.Copy buffer and update TDT
 	memcpy((void *) KADDR(tx->addr), packet, len); 
 	tx->length = len;
-	netipc[E1000_TDT] = (netipc[E1000_TDT] + 1) % MAX_TX_NUM;
 
 	// 3.Set RS bit to make NIC report status when send complete
 	tx->cmd |= (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
+
+	netipc[E1000_TDT] = (netipc[E1000_TDT] + 1) % MAX_TX_NUM;
 
 	return 0;
 }
