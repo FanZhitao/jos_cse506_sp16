@@ -480,6 +480,11 @@ sys_send_packet(void *packet, size_t len)
 	return send_packet(packet, len);
 }
 
+static int
+sys_recv_packet(void *packet, size_t *len)
+{
+	return recv_packet(packet, len);
+}
 
 // Dispatches to the correct kernel function, passing the arguments.
 int64_t
@@ -535,6 +540,9 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 	case SYS_send_packet:
 		user_mem_assert(curenv, (void *) a1, (size_t) a2, PTE_W);
 		return sys_send_packet((void *) a1, (size_t) a2);
+	case SYS_recv_packet:
+		user_mem_assert(curenv, (void *)a1, *((size_t *)a2), PTE_W);
+		return sys_recv_packet((void *)a1, (size_t *)a2);
 	default:
 		return -E_NO_SYS;
 	}

@@ -20,6 +20,7 @@ enum {
 	SYS_set_priority,
 	SYS_time_msec,
 	SYS_send_packet,
+	SYS_recv_packet,
 	NSYSCALLS
 };
 

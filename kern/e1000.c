@@ -157,3 +157,26 @@ int send_packet(void *packet, size_t len)
 	return 0;
 }
 
+int recv_packet(void *packet, size_t *len)
+{
+	int tail = netipc[E1000_RDT];
+	struct e1000_rx_desc *rx = rx_ring + (tail + 1) % N_RX_NUM;
+	// If DD status bit is set, a packet has been delivered to this descriptor's packet buffer
+	// And make sure RDH never equals to RDT.
+	if ((rx->status & E1000_RXD_STAT_DD) && ((tail + 1) % N_RX_NUM != netipc[E1000_RDH]))
+	{
+		*len = rx->length;
+
+		// copy the packet data out of buffer
+		memcpy(packet, KADDR(rx->buffer_addr), *len);
+
+		rx->status &= ~E1000_RXD_STAT_DD;
+
+		// tell the card the descriptor is free by updating the queue's tail index, RDT
+		netipc[E1000_RDT] = (tail + 1) % N_RX_NUM;
+
+		return 0;
+	}
+
+	return -1; // try again
+}
