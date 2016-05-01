@@ -66,7 +66,7 @@ unsigned int sys_time_msec(void);
 int 	sys_send_packet(void *packet, size_t len);
 // Lab 6a - Challenge 2: Zero-copy transmit
 int 	sys_send_packet_direct(void *packet, size_t len);
-
+int	sys_recv_packet(void *packet, size_t *len);
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t __attribute__((always_inline))
