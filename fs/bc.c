@@ -38,13 +38,14 @@ static void
 bc_reclaim(uint64_t blockno)
 {
 	int i;
+	void *va;
 
 	// 0.Bypass bootsector, superblock, bitmap, ibitmap, 2*itable
 	if (blockno <= 5)
 		return;
 
 	// 1.Bookkeep block usage
-	cprintf(" Pgfault block: %d\n", blockno);
+	//cprintf(" Pgfault block: %d\n", blockno);
 	usage.active[usage.tail] = blockno;
 	usage.tail = (usage.tail + 1) % CACHE_THRESHOLD;
 
@@ -53,24 +54,27 @@ bc_reclaim(uint64_t blockno)
 
 		// 3.Second-Chance replacement algorithm
 		// 3.1 Look for a victim
-		for (i = usage.head; i <= usage.tail; i = (i+1) % CACHE_THRESHOLD)
-			if (uvpt[PGNUM(diskaddr(usage.active[i]))] & PTE_A)
+		for (i = usage.head; i <= usage.tail; i = (i+1) % CACHE_THRESHOLD) {
+			va = diskaddr(usage.active[i]);
+			if (uvpt[PGNUM(va)] & PTE_A) {
+				// Restore "accessed" bit and give it a second chance
+				sys_page_map(0, va, 0, va, uvpt[PGNUM(va)] & ~PTE_A);
 				continue;
+			}
+		}
 
-		// 3.2 All blocks are accessed, then it doesn't have the second chance
-		//  just reclaim the head.
-		if (i == (usage.tail + 1) % CACHE_THRESHOLD)
+		// 3.2 All blocks are accessed, then just reclaim the head
+		if (i == (usage.tail + 1) % CACHE_THRESHOLD) {
 			i = usage.head;
+			va = diskaddr(usage.active[i]);
+		}
 
 		// 3.3 Perform reclaimation
-		cprintf(" Reclaim block: %d\n", usage.active[i]);
-		flush_block(diskaddr(usage.active[i]));
-		sys_page_unmap(0, diskaddr(usage.active[i]));
+		//cprintf(" Reclaim block: %d\n", usage.active[i]);
+		flush_block(va);
+		sys_page_unmap(0, va);
 
-		// 3.4 Restore "accessed" bit
-		//uvpt[PGNUM(diskaddr(usage.active[i]))] &= ~PTE_A;
-
-		// 3.5 Move head pointer
+		// 3.4 Move head pointer
 		usage.head = (usage.head + 1) % CACHE_THRESHOLD;
 	}
 }
