@@ -25,34 +25,53 @@ va_is_dirty(void *va)
 }
 
 // -------------------------------------------------------------
-// Lab 5 - Challenge 2 Eviction of Block Cache
+// Lab 5 - Challenge 2: Eviction of Block Cache
+
+#define CACHE_THRESHOLD 10
+
+struct Usage {
+	uint64_t active[CACHE_THRESHOLD];
+	uint32_t head, tail;
+} usage = { .head = 0, .tail = 0 };
 
 static void
-bc_reclaim()
+bc_reclaim(uint64_t blockno)
 {
-	uintptr_t va;
-	int ntol, nacc;
-       	double usage;
+	int i;
 
-	// 1.Calculate usage
-	ntol = (DISKSIZE / BLKSIZE);
-	nacc = 0;
-	for (va = DISKMAP; va < (DISKMAP+DISKSIZE); va+=BLKSIZE) {
-		if (!va_is_mapped((void *) va))
-			continue;
+	// 0.Bypass bootsector, superblock, bitmap, ibitmap, 2*itable
+	if (blockno <= 5)
+		return;
 
-		if (uvpt[PGNUM(va)] & PTE_A)
-			nacc++;
-	}
+	// 1.Bookkeep block usage
+	cprintf(" Pgfault block: %d\n", blockno);
+	usage.active[usage.tail] = blockno;
+	usage.tail = (usage.tail + 1) % CACHE_THRESHOLD;
 
-	// 2.Perform reclaimation if low memory
-	//cprintf("  total=%d, access=%d\n", ntol, nacc);
-	//usage = (double) (1 / ntol);
+	// 2.Check if cache memory is above threshold
+	if (usage.head == usage.tail) {
 
-	if (nacc >= 10) {
-		//cprintf("  Perform reclaimation: total=%d, access=%d, usage=%f\n", ntol, nacc, usage);
-		//cprintf("   va %08x is accessed\n", va);
-		cprintf("Reclaim!!!\n");
+		// 3.Second-Chance replacement algorithm
+		// 3.1 Look for a victim
+		for (i = usage.head; i <= usage.tail; i = (i+1) % CACHE_THRESHOLD)
+			if (uvpt[PGNUM(diskaddr(usage.active[i]))] & PTE_A)
+				continue;
+
+		// 3.2 All blocks are accessed, then it doesn't have the second chance
+		//  just reclaim the head.
+		if (i == (usage.tail + 1) % CACHE_THRESHOLD)
+			i = usage.head;
+
+		// 3.3 Perform reclaimation
+		cprintf(" Reclaim block: %d\n", usage.active[i]);
+		flush_block(diskaddr(usage.active[i]));
+		sys_page_unmap(0, diskaddr(usage.active[i]));
+
+		// 3.4 Restore "accessed" bit
+		//uvpt[PGNUM(diskaddr(usage.active[i]))] &= ~PTE_A;
+
+		// 3.5 Move head pointer
+		usage.head = (usage.head + 1) % CACHE_THRESHOLD;
 	}
 }
 // -------------------------------------------------------------
@@ -76,8 +95,8 @@ bc_pgfault(struct UTrapframe *utf)
 	if (super && blockno >= super->s_nblocks)
 		panic("reading non-existent block %08x\n", blockno);
 
-	// Lab 5 - Challenge 2 Eviction of Block Cache
-	//bc_reclaim();
+	// Lab 5 - Challenge 2
+	bc_reclaim(blockno);
 
 	// Allocate a page in the disk map region, read the contents
 	// of the block from the disk into that page.

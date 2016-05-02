@@ -52,6 +52,80 @@ int send_packet_direct(void *packet, size_t len)
 	return 0;
 }
 
+================================================================
+		Lab 5 - Challenge 2: Cache Eviction
+================================================================
+
+A simple second-chance algorithm is implemented here. The active array in struct Usage maintains the block in use.
+It works as a ring buffer and reclaim one block when it is full. Before performing reclaimation, it checks the 
+"Accessed" bit to give a second chance. If all blocks are accessed recently, then just reclaim the one at first.
+
+------------------------------------------------------------------------
+#define CACHE_THRESHOLD 10
+
+struct Usage {
+	uint64_t active[CACHE_THRESHOLD];
+	uint32_t head, tail;
+} usage = { .head = 0, .tail = 0 };
+
+static void
+bc_reclaim(uint64_t blockno)
+{
+	int i;
+
+	// 0.Bypass bootsector, superblock, bitmap, ibitmap, 2*itable
+	if (blockno <= 5)
+		return;
+
+	// 1.Bookkeep block usage
+	cprintf(" Pgfault block: %d\n", blockno);
+	usage.active[usage.tail] = blockno;
+	usage.tail = (usage.tail + 1) % CACHE_THRESHOLD;
+
+	// 2.Check if cache memory is above threshold
+	if (usage.head == usage.tail) {
+
+		// 3.Second-Chance replacement algorithm
+		// 3.1 Look for a victim
+		for (i = usage.head; i <= usage.tail; i = (i+1) % CACHE_THRESHOLD)
+			if (uvpt[PGNUM(diskaddr(usage.active[i]))] & PTE_A)
+				continue;
+
+		// 3.2 All blocks are accessed, then it doesn't have the second chance
+		//  just reclaim the head.
+		if (i == (usage.tail + 1) % CACHE_THRESHOLD)
+			i = usage.head;
+
+		// 3.3 Perform reclaimation
+		cprintf(" Reclaim block: %d\n", usage.active[i]);
+		flush_block(diskaddr(usage.active[i]));
+		sys_page_unmap(0, diskaddr(usage.active[i]));
+
+		// 3.4 Restore "accessed" bit
+		//uvpt[PGNUM(diskaddr(usage.active[i]))] &= ~PTE_A;
+
+		// 3.5 Move head pointer
+		usage.head = (usage.head + 1) % CACHE_THRESHOLD;
+	}
+}
+------------------------------------------------------------------------
+
+static void
+bc_pgfault(struct UTrapframe *utf)
+{
+	void *addr = (void *) utf->utf_fault_va;
+	uint64_t blockno = ((uint64_t)addr - DISKMAP) / BLKSIZE;
+	int r;
+
+	// Check that the fault was within the block cache region
+	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
+		panic("page fault in FS: eip %08x, va %08x, err %04x",
+		      utf->utf_rip, addr, utf->utf_err);
+	......
+	// Lab 5 - Challenge 2
+	bc_reclaim(blockno);
+	......
+}
 
 ================================================================
 		Lab 5 - Challenge 4: Add Inode
